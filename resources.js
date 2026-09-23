@@ -56,26 +56,29 @@
     if (!key) return;
 
     if (favUser && window.BMX?.sb) {
-      // Signed in — write to Supabase
-      const exists = favCache.some(f => f.type === kind && f.key === key);
-      if (exists) {
+      const { data: existing } = await window.BMX.sb
+        .from('favorites')
+        .select('id')
+        .eq('user_id', favUser.id)
+        .eq('kind', kind)
+        .eq('key', key)
+        .maybeSingle();
+
+      if (existing) {
         const { error } = await window.BMX.sb
           .from('favorites')
           .delete()
-          .eq('user_id', favUser.id)
-          .eq('kind', kind)
-          .eq('key', key);
-        if (error) { console.error(error); return; }
-        favCache = favCache.filter(f => !(f.type === kind && f.key === key));
+          .eq('id', existing.id);
+        if (error) { console.error('delete', error); return; }
       } else {
         const { error } = await window.BMX.sb
           .from('favorites')
           .insert({ user_id: favUser.id, kind, key, title, note });
-        if (error) { console.error(error); return; }
-        favCache.push({ type: kind, key, title, note });
+        if (error) { console.error('insert', error); return; }
       }
+
+      await loadFavs();
     } else {
-      // Not signed in — localStorage
       const favs = readLocalFavs();
       const idx = favs.findIndex(f => f.type === kind && f.key === key);
       if (idx >= 0) favs.splice(idx, 1);
@@ -84,7 +87,6 @@
       favCache = favs.map(f => ({ type: f.type, key: f.key, title: f.title, note: f.note }));
     }
   }
-
   // On page load and whenever auth state changes, reload favorites and re-render
   async function refreshFavorites() {
     await loadFavs();
