@@ -4,35 +4,93 @@
 
   if (!tabsEl || !bodyEl || typeof RESOURCES === 'undefined') return;
 
-  /* ─────────────── FAVORITES STORAGE ─────────────── */
+  /* ─────────────── FAVORITES (Supabase + localStorage fallback) ─────────────── */
   const LS_FAVS = 'bmxtools.favorites';
 
-  function readFavs() {
+  // Local cache so isFav() stays synchronous
+  let favCache = [];
+  let favUser = null;
+
+  function readLocalFavs() {
     try {
       const raw = localStorage.getItem(LS_FAVS);
       if (raw) return JSON.parse(raw);
     } catch {}
     return [];
   }
-  function writeFavs(favs) {
+  function writeLocalFavs(favs) {
     try { localStorage.setItem(LS_FAVS, JSON.stringify(favs)); } catch {}
   }
 
   function isFav(key, kind = 'resource') {
     if (!key) return false;
-    return readFavs().some(f => f.type === kind && f.key === key);
+    return favCache.some(f => f.type === kind && f.key === key);
   }
 
-  function toggleFav({ kind, key, title, note }) {
-    if (!key) return;
-    const favs = readFavs();
-    const idx = favs.findIndex(f => f.type === kind && f.key === key);
-    if (idx >= 0) {
-      favs.splice(idx, 1);
+  async function loadFavs() {
+    const user = window.BMX?.auth?.getUser();
+    favUser = user;
+
+    if (user && window.BMX?.sb) {
+      // Signed in — load from Supabase
+      const { data, error } = await window.BMX.sb
+        .from('favorites')
+        .select('kind, key, title, note');
+      if (error) {
+        console.error('Failed to load favorites:', error);
+        favCache = [];
+      } else {
+        favCache = (data || []).map(r => ({
+          type: r.kind, key: r.key, title: r.title, note: r.note
+        }));
+      }
     } else {
-      favs.push({ type: kind, key, title: title || '', note: note || '', savedAt: Date.now() });
+      // Not signed in — use localStorage
+      favCache = readLocalFavs().map(f => ({
+        type: f.type, key: f.key, title: f.title, note: f.note
+      }));
     }
-    writeFavs(favs);
+  }
+
+  async function toggleFav({ kind, key, title, note }) {
+    if (!key) return;
+
+    if (favUser && window.BMX?.sb) {
+      // Signed in — write to Supabase
+      const exists = favCache.some(f => f.type === kind && f.key === key);
+      if (exists) {
+        const { error } = await window.BMX.sb
+          .from('favorites')
+          .delete()
+          .eq('user_id', favUser.id)
+          .eq('kind', kind)
+          .eq('key', key);
+        if (error) { console.error(error); return; }
+        favCache = favCache.filter(f => !(f.type === kind && f.key === key));
+      } else {
+        const { error } = await window.BMX.sb
+          .from('favorites')
+          .insert({ user_id: favUser.id, kind, key, title, note });
+        if (error) { console.error(error); return; }
+        favCache.push({ type: kind, key, title, note });
+      }
+    } else {
+      // Not signed in — localStorage
+      const favs = readLocalFavs();
+      const idx = favs.findIndex(f => f.type === kind && f.key === key);
+      if (idx >= 0) favs.splice(idx, 1);
+      else favs.push({ type: kind, key, title: title || '', note: note || '', savedAt: Date.now() });
+      writeLocalFavs(favs);
+      favCache = favs.map(f => ({ type: f.type, key: f.key, title: f.title, note: f.note }));
+    }
+  }
+
+  // On page load and whenever auth state changes, reload favorites and re-render
+  async function refreshFavorites() {
+    await loadFavs();
+    // Re-render current tab so stars reflect the new cache
+    const activeTab = document.querySelector('.res-tab.active')?.dataset.tab || 'motivation';
+    renderTab(activeTab);
   }
 
   /* ─────────────── HELPERS ─────────────── */
