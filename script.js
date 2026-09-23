@@ -74,7 +74,55 @@
   function writeDraft(data) {
     try { localStorage.setItem(LS_DRAFT, JSON.stringify(data)); } catch {}
   }
+  /* ─────────────── SUPABASE WRITE HELPERS ─────────────── */
+  async function saveMapToSupabase(name, pins) {
+    const user = window.BMX?.auth?.getUser();
+    if (!user || !window.BMX?.sb) return { ok: false, reason: 'not-logged-in' };
 
+    const { error } = await window.BMX.sb
+      .from('maps')
+      .insert({ user_id: user.id, name, pins });
+
+    if (error) {
+      console.error('saveMapToSupabase:', error);
+      return { ok: false, error };
+    }
+    return { ok: true };
+  }
+
+  async function updateMapInSupabase(id, pins) {
+    const user = window.BMX?.auth?.getUser();
+    if (!user || !window.BMX?.sb) return { ok: false, reason: 'not-logged-in' };
+
+    const { error } = await window.BMX.sb
+      .from('maps')
+      .update({ pins, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('updateMapInSupabase:', error);
+      return { ok: false, error };
+    }
+    return { ok: true };
+  }
+
+  async function deleteMapFromSupabase(id) {
+    const user = window.BMX?.auth?.getUser();
+    if (!user || !window.BMX?.sb) return { ok: false, reason: 'not-logged-in' };
+
+    const { error } = await window.BMX.sb
+      .from('maps')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('deleteMapFromSupabase:', error);
+      return { ok: false, error };
+    }
+    return { ok: true };
+  }
   /* ─────────────── ONE-TIME MIGRATION ───────────────
      If the user is logged in, has nothing in Supabase yet,
      but has maps in localStorage, upload them once. */
@@ -559,46 +607,80 @@
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
       if (page === 'creator') {
-        // Prompt for a name (defaults to toolbar input)
         const suggested = getCreatorName() || 'My Map';
         const name = window.prompt('Name this map:', suggested);
         if (name === null) return;
         const trimmed = name.trim() || 'Untitled Map';
+        const cleanPins = pins.map(p => ({ ...p }));
 
-        const userMaps = readUserMaps();
-        const existing = userMaps.find(m => m.name === trimmed);
-        if (existing) {
-          if (!window.confirm(`A map named "${trimmed}" already exists. Overwrite it?`)) return;
-          existing.pins = pins.map(p => ({ ...p }));
-          existing.updatedAt = Date.now();
+        const user = window.BMX?.auth?.getUser();
+        if (user && window.BMX?.sb) {
+          // Save to Supabase
+          const existing = userMapsCache.find(m => m.name === trimmed);
+          let result;
+          if (existing) {
+            if (!window.confirm(`A map named "${trimmed}" already exists. Overwrite it?`)) return;
+            result = await updateMapInSupabase(existing.id, cleanPins);
+          } else {
+            result = await saveMapToSupabase(trimmed, cleanPins);
+          }
+
+          if (!result.ok) {
+            window.alert('Save failed. Check the console for details.');
+            return;
+          }
+
+          await loadUserMaps();
+          const nameEl = document.getElementById('creatorMapName');
+          if (nameEl) nameEl.value = trimmed;
+          window.alert(`Saved "${trimmed}" to your maps.`);
         } else {
-          userMaps.push({
-            id: uid('map'),
-            name: trimmed,
-            seed: false,
-            pins: pins.map(p => ({ ...p })),
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-          });
+          // Fallback: save to localStorage (logged out)
+          const userMaps = readLocalUserMaps();
+          const existing = userMaps.find(m => m.name === trimmed);
+          if (existing) {
+            if (!window.confirm(`A map named "${trimmed}" already exists. Overwrite it?`)) return;
+            existing.pins = cleanPins;
+            existing.updatedAt = Date.now();
+          } else {
+            userMaps.push({
+              id: uid('map'),
+              name: trimmed,
+              seed: false,
+              pins: cleanPins,
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            });
+          }
+          writeUserMaps(userMaps);
+          const nameEl = document.getElementById('creatorMapName');
+          if (nameEl) nameEl.value = trimmed;
+          window.alert(`Saved "${trimmed}" locally. Log in to sync it to your account.`);
         }
-        writeUserMaps(userMaps);
+      }
+       } else if (page === 'maps' && currentMap && !currentMap.seed) {
+        const cleanPins = pins.map(p => ({ ...p }));
+        const user = window.BMX?.auth?.getUser();
 
-        const nameEl = document.getElementById('creatorMapName');
-        if (nameEl) nameEl.value = trimmed;
-
-        // Also offer JSON download as a backup
-        downloadJson({ mapId, name: trimmed, pins });
-
-        window.alert(`Saved "${trimmed}" to your maps. It's now available on BMX Maps.`);
-      } else if (page === 'maps' && currentMap && !currentMap.seed) {
-        // Overwrite the loaded user map
-        const list = readUserMaps();
-        const idx = list.findIndex(m => m.id === currentMap.id);
-        if (idx >= 0) {
-          list[idx].pins = pins.map(p => ({ ...p }));
-          list[idx].updatedAt = Date.now();
-          writeUserMaps(list);
-          currentMap.pins = pins.map(p => ({ ...p }));
+        if (user && window.BMX?.sb) {
+          const result = await updateMapInSupabase(currentMap.id, cleanPins);
+          if (!result.ok) {
+            window.alert('Save failed. Check the console for details.');
+            return;
+          }
+          await loadUserMaps();
+          currentMap.pins = cleanPins;
+          flashSaveButton('Saved!');
+        } else {
+          // Fallback: localStorage
+          const list = readLocalUserMaps();
+          const idx = list.findIndex(m => m.id === currentMap.id);
+          if (idx >= 0) {
+            list[idx].pins = cleanPins;
+            list[idx].updatedAt = Date.now();
+            writeUserMaps(list);
+          }
+          currentMap.pins = cleanPins;
           renderMapLists();
           flashSaveButton('Saved!');
         }
@@ -710,11 +792,23 @@
     if (delBtn) {
       e.stopPropagation();
       const id = delBtn.dataset.deleteMap;
-      const map = readUserMaps().find(m => m.id === id);
+      const map = userMapsCache.find(m => m.id === id);
       if (!map) return;
       if (!window.confirm(`Delete "${map.name}"? This can't be undone.`)) return;
-      const list = readUserMaps().filter(m => m.id !== id);
-      writeUserMaps(list);
+
+      const user = window.BMX?.auth?.getUser();
+      if (user && window.BMX?.sb) {
+        const result = await deleteMapFromSupabase(id);
+        if (!result.ok) {
+          window.alert('Delete failed. Check the console for details.');
+          return;
+        }
+        await loadUserMaps();
+      } else {
+        const list = readLocalUserMaps().filter(m => m.id !== id);
+        writeUserMaps(list);
+      }
+
       if (currentMap && currentMap.id === id) {
         currentMap = null;
         pins = [];
