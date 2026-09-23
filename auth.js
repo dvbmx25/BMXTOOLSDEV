@@ -98,7 +98,9 @@
     renderNavAuth();
   });
 
-  refreshUser();
+    // Expose a promise so other scripts can wait until we know the auth state.
+  window.BMX = window.BMX || {};
+  window.BMX.authReady = refreshUser();
 
   // Expose public API
   window.BMX.auth = {
