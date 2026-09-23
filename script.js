@@ -755,7 +755,12 @@
   });
 
    /* ─────────────── INIT ─────────────── */
-  async function boot() {
+    async function boot() {
+    // Wait for auth.js to finish its initial check before deciding where to load from.
+    if (window.BMX?.authReady) {
+      await window.BMX.authReady;
+    }
+
     // Load maps from the right source first
     await migrateLocalMapsIfNeeded();
     await loadUserMaps();
