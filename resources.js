@@ -275,10 +275,9 @@
     });
   }
 
-  /* ─────────────── FAVORITES WIRING ─────────────── */
   function wireFavButtons() {
     bodyEl.querySelectorAll('.res-fav-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
 
@@ -287,7 +286,7 @@
         const title = btn.dataset.title;
         const note = btn.dataset.note;
 
-        toggleFav({ kind, key, title, note });
+        await toggleFav({ kind, key, title, note });
 
         const nowFav = isFav(key, kind);
         btn.classList.toggle('is-fav', nowFav);
