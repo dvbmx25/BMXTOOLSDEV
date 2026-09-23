@@ -754,21 +754,35 @@
     closePopup();
   });
 
-  /* ─────────────── INIT ─────────────── */
-  if (page === 'creator') {
-    const draft = readDraft();
-    if (draft && Array.isArray(draft.pins)) {
-      nextId = 0;
-      pins = draft.pins.map(p => ({ ...p, id: ++nextId }));
-    }
-    const nameEl = document.getElementById('creatorMapName');
-    if (nameEl && draft && draft.name) nameEl.value = draft.name;
-  } else {
-    renderMapLists();
-    updateSaveButtonVisibility();
-  }
+   /* ─────────────── INIT ─────────────── */
+  async function boot() {
+    // Load maps from the right source first
+    await migrateLocalMapsIfNeeded();
+    await loadUserMaps();
 
-  renderPins();
-  renderAll();
+    if (page === 'creator') {
+      const draft = readDraft();
+      if (draft && Array.isArray(draft.pins)) {
+        nextId = 0;
+        pins = draft.pins.map(p => ({ ...p, id: ++nextId }));
+      }
+      const nameEl = document.getElementById('creatorMapName');
+      if (nameEl && draft && draft.name) nameEl.value = draft.name;
+    } else {
+      renderMapLists();
+      updateSaveButtonVisibility();
+    }
+
+    renderPins();
+    renderAll();
+  }
+  boot();
+
+  // When auth changes (login/logout), reload the map list
+  if (window.BMX?.auth) {
+    window.BMX.auth.onChange(() => {
+      migrateLocalMapsIfNeeded().then(() => loadUserMaps());
+    });
+  }
 
 })();
