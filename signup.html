@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up · BMXTOOLS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="signup">
+
+<header class="site-header">
+  <a href="index.html" class="logo">BMX<span class="logo-accent">TOOLS</span></a>
+  <nav class="site-nav">
+    <a href="index.html">Map Creator</a>
+    <a href="maps.html">BMX MAPS</a>
+    <a href="training.html">Training MAP</a>
+    <a href="challenges.html">Challenges</a>
+    <a href="resources.html">Resources</a>
+    <a href="coaching.html">Online Coaching</a>
+  </nav>
+  <div id="navAuth"></div>
+</header>
+
+<div class="pinboard-container">
+  <div class="board-header">
+    <h2>Sign Up</h2>
+    <p class="board-description">Create an account to save your maps, training log, and favorites.</p>
+  </div>
+
+  <form class="auth-card" id="signupForm">
+    <div class="auth-field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
+      <div class="auth-hint">At least 6 characters.</div>
+    </div>
+    <div class="auth-error" id="signupError" hidden></div>
+    <button type="submit" class="auth-submit" id="signupSubmit">Create Account</button>
+    <p class="auth-switch">Already have an account? <a href="login.html">Log in</a></p>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-client.js"></script>
+<script src="auth.js"></script>
+<script>
+(function () {
+  const form = document.getElementById('signupForm');
+  const errEl = document.getElementById('signupError');
+  const submit = document.getElementById('signupSubmit');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.hidden = true;
+    submit.disabled = true;
+    submit.textContent = 'Creating account…';
+
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+      await window.BMX.auth.signUp(email, password);
+      window.location.href = 'index.html';
+    } catch (err) {
+      errEl.textContent = err.message || 'Signup failed';
+      errEl.hidden = false;
+      submit.disabled = false;
+      submit.textContent = 'Create Account';
+    }
+  });
+})();
+</script>
+</body>
+</html>
