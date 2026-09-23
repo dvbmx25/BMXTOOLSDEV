@@ -309,7 +309,13 @@
     renderTab(btn.dataset.tab);
   });
 
-  /* ─────────────── INIT ─────────────── */
+    /* ─────────────── INIT ─────────────── */
   renderTab('motivation');
+
+  if (window.BMX?.auth) {
+    window.BMX.auth.onChange(() => { refreshFavorites(); });
+  } else {
+    loadFavs().then(() => renderTab('motivation'));
+  }
 
 })();
