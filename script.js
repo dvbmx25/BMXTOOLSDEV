@@ -13,19 +13,99 @@
   const LS_DRAFT = 'bmxtools.creatorDraft';
   const LS_USER_MAPS = 'bmxtools.userMaps';
 
-  function readUserMaps() {
+  // In-memory cache of the user's maps so readUserMaps() stays synchronous.
+  let userMapsCache = [];
+
+  function readLocalUserMaps() {
     try { return JSON.parse(localStorage.getItem(LS_USER_MAPS)) || []; }
     catch { return []; }
   }
-  function writeUserMaps(list) {
+  function writeLocalUserMaps(list) {
     try { localStorage.setItem(LS_USER_MAPS, JSON.stringify(list)); } catch {}
   }
+
+  // Returns the cached list — populated by loadUserMaps() at boot and after writes.
+  function readUserMaps() {
+    return userMapsCache;
+  }
+
+  // Still used by write-path code for now (until write migration lands).
+  function writeUserMaps(list) {
+    userMapsCache = list;
+    writeLocalUserMaps(list);
+  }
+
+  // Load maps from Supabase when logged in, else from localStorage.
+  async function loadUserMaps() {
+    const user = window.BMX?.auth?.getUser();
+    if (user && window.BMX?.sb) {
+      const { data, error } = await window.BMX.sb
+        .from('maps')
+        .select('id, name, pins, created_at, updated_at')
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Failed to load maps:', error);
+        userMapsCache = readLocalUserMaps();
+      } else {
+        userMapsCache = (data || []).map(r => ({
+          id: r.id,
+          name: r.name,
+          seed: false,
+          pins: r.pins || [],
+          createdAt: new Date(r.created_at).getTime(),
+          updatedAt: new Date(r.updated_at).getTime()
+        }));
+      }
+    } else {
+      userMapsCache = readLocalUserMaps();
+    }
+
+    // If the maps page is open, redraw its sidebar
+    if (page === 'maps' && typeof renderMapLists === 'function') {
+      renderMapLists();
+    }
+  }
+
   function readDraft() {
     try { return JSON.parse(localStorage.getItem(LS_DRAFT)) || null; }
     catch { return null; }
   }
   function writeDraft(data) {
     try { localStorage.setItem(LS_DRAFT, JSON.stringify(data)); } catch {}
+  }
+
+  /* ─────────────── ONE-TIME MIGRATION ───────────────
+     If the user is logged in, has nothing in Supabase yet,
+     but has maps in localStorage, upload them once. */
+  async function migrateLocalMapsIfNeeded() {
+    const user = window.BMX?.auth?.getUser();
+    if (!user || !window.BMX?.sb) return;
+
+    const local = readLocalUserMaps();
+    if (!local.length) return;
+
+    // Only migrate if Supabase has zero maps for this user
+    const { count, error } = await window.BMX.sb
+      .from('maps')
+      .select('*', { count: 'exact', head: true });
+
+    if (error || count > 0) return;
+
+    const rows = local.map(m => ({
+      user_id: user.id,
+      name: m.name || 'Untitled Map',
+      pins: m.pins || []
+    }));
+
+    const { error: insertErr } = await window.BMX.sb.from('maps').insert(rows);
+    if (insertErr) {
+      console.error('Map migration failed:', insertErr);
+      return;
+    }
+
+    // Keep localStorage as a backup (don't delete), but let users know
+    console.log(`Migrated ${rows.length} map(s) to your account.`);
   }
 
   /* ─────────────── STATE ─────────────── */
