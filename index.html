@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Map Creator · BMXTOOLS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="creator">
+
+<header class="site-header">
+  <a href="index.html" class="logo">BMX<span class="logo-accent">TOOLS</span></a>
+  <nav class="site-nav">
+    <a href="index.html" class="active">Map Creator</a>
+    <a href="maps.html">BMX MAPS</a>
+    <a href="training.html">Training MAP</a>
+    <a href="challenges.html">Challenges</a>
+    <a href="resources.html">Resources</a>
+    <a href="coaching.html">Online Coaching</a>
+  </nav>
+</header>
+
+<div class="pinboard-container">
+  <div class="board-header">
+    <h2>Map Creator</h2>
+    <p class="board-description">Create a MAP of all your RACES and SESSIONS... Challenge YOURSELF to list them all</p>
+   <div class="creator-toolbar">
+  <input type="text" id="creatorMapName" class="creator-map-name" placeholder="Untitled Map" maxlength="60" />
+  <a href="maps.html" class="ghost-btn">View Your Maps</a>
+</div>
+
+  <div class="board-layout">
+    <div class="map-column">
+      <div class="image-pin-wrapper" id="imageWrapper" data-map-id="creator">
+        <img
+          class="static-image"
+          id="staticImage"
+          draggable="false"
+          alt="Map of the United States"
+          src="https://upload.wikimedia.org/wikipedia/commons/1/1a/Blank_US_Map_%28states_only%29.svg"
+        />
+      </div>
+    </div>
+
+    <div class="pins-panel" id="pinsPanel">
+      <!-- Sidebar content is injected by script.js based on data-page -->
+    </div>
+  </div>
+
+  <div class="hint">
+    <span>🔹 click map to place the active pin type</span>
+    <span>✏️ click a pin to edit</span>
+    <span>☑️ checkbox hides the whole list</span>
+    <span><kbd>⌘/Ctrl</kbd> + click pin to remove</span>
+  </div>
+</div>
+
+<script src="maps-data.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

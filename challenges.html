@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Challenges · BMXTOOLS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="challenges">
+
+<header class="site-header">
+  <a href="index.html" class="logo">BMX<span class="logo-accent">TOOLS</span></a>
+  <nav class="site-nav">
+    <a href="index.html">Map Creator</a>
+    <a href="maps.html">BMX MAPS</a>
+    <a href="training.html">Training MAP</a>
+    <a href="challenges.html" class="active">Challenges</a>
+    <a href="resources.html">Resources</a>
+    <a href="coaching.html">Online Coaching</a>
+  </nav>
+</header>
+
+<div class="pinboard-container">
+  <div class="board-header">
+    <h2>Challenges</h2>
+    <p class="board-description">Train your brain. Climb the leaderboard.</p>
+  </div>
+
+<div class="challenges-tabs" id="challengesTabs">
+  <button class="ch-tab active" data-game="reaction">Reaction Time</button>
+  <button class="ch-tab" data-game="memory">Memory Pairs</button>
+</div>
+  <div class="challenges-stage" id="challengesStage">
+    <!-- Active game renders here -->
+  </div>
+
+  <div class="challenges-leaderboard" id="challengesLeaderboard">
+    <div class="cl-header">
+      <h3>Leaderboard</h3>
+      <span class="cl-subtitle" id="clSubtitle">Reaction Time · best single</span>
+    </div>
+    <table class="cl-table">
+<thead>
+  <tr>
+    <th>#</th>
+    <th>Racer</th>
+    <th class="cl-sortable" data-sort="best">Best <span class="cl-arrow"></span></th>
+    <th class="cl-sortable" data-sort="avg">Avg <span class="cl-arrow"></span></th>
+    <th class="cl-sortable" data-sort="plays">Plays <span class="cl-arrow"></span></th>
+  </tr>
+</thead>      <tbody id="clBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="challenges.js"></script>
+</body>
+</html>

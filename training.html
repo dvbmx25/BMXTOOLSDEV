@@ -1,0 +1,49 @@
+<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Title · BMXTOOLS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header class="site-header">
+    <a href="index.html" class="logo">BMX<span class="logo-accent">TOOLS</span></a>
+    <nav class="site-nav">
+      <a href="index.html">Map Creator</a>
+      <a href="maps.html">BMX MAPS</a>
+      <a href="training.html" class="active">Training MAP</a>
+      <a href="challenges.html">Challenges</a>
+      <a href="resources.html">Resources</a>
+      <a href="coaching.html">Online Coaching</a>
+    </nav>
+  </header>
+
+ <div class="pinboard-container">
+  <div class="board-header">
+    <h2>Training Plan</h2>
+    <p class="board-description">Build a program, set goals for each session, and journal how it went.</p>
+  </div>
+
+  <div class="training-sheet" id="trainingSheet">
+    <div class="training-sheet-header">
+      <button class="ts-nav-btn" id="tsPrev" title="Previous month">◀</button>
+      <div class="ts-month-label" id="tsMonthLabel">Month</div>
+      <button class="ts-nav-btn" id="tsNext" title="Next month">▶</button>
+      <button class="ts-nav-btn ts-today-btn" id="tsToday">Today</button>
+    </div>
+
+    <div class="ts-grid-scroll">
+      <div class="ts-weekdays">
+        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+      </div>
+      <div class="ts-grid" id="tsGrid"></div>
+    </div>
+  </div>
+</div>
+
+  <script src="training.js"></script>
+</body>
+</html>
