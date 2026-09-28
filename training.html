@@ -39,7 +39,7 @@
       <h2>Set up your training plan</h2>
       <p class="tp-wizard-sub">Answer a few questions and we'll build a plan leading up to your race.</p>
 
-      <label class="tp-field-label">What's your main goal?</label>
+      <label class="tp-field-label">What's your main goal for this next training block?</label>
       <input type="text" id="tpGoal" class="tp-input" placeholder="e.g. Get faster starts">
 
       <label class="tp-field-label">Next race name</label>
@@ -47,9 +47,6 @@
 
       <label class="tp-field-label">Race date</label>
       <input type="date" id="tpRaceDate" class="tp-input">
-
-      <label class="tp-field-label">Which days do you train?</label>
-      <div id="tpDaysPicker" class="tp-days-picker"></div>
 
       <div class="tp-wizard-actions">
         <button id="tpBuildBtn" class="menu-btn primary">Build My Plan</button>
@@ -83,6 +80,21 @@
           <p class="tp-library-hint">Drag a workout onto a session to fill its focus.</p>
           <div id="tpLibrary" class="tp-library"></div>
         </aside>
+      </div>
+    </div>
+  </div>
+
+  <!-- In-page popup for entering a number of reps -->
+  <div id="tpNumberPopup" class="tp-popup-overlay" style="display:none;">
+    <div class="tp-popup">
+      <div class="tp-popup-header">
+        <h3 id="tpNumberPopupTitle">How many?</h3>
+      </div>
+      <p class="tp-popup-sub" id="tpNumberPopupSub">Enter the number of reps for this workout.</p>
+      <input type="number" id="tpNumberInput" class="tp-input" min="1" value="5" autocomplete="off">
+      <div class="tp-popup-actions">
+        <button id="tpNumberCancel" class="tp-popup-cancel" type="button">Cancel</button>
+        <button id="tpNumberConfirm" class="tp-popup-save" type="button">Confirm</button>
       </div>
     </div>
   </div>
