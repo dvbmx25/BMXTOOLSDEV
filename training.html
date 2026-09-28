@@ -82,6 +82,16 @@
           <div id="tpLibrary" class="tp-library"></div>
         </aside>
       </div>
+
+      <div id="tpPastPlansSection" class="tp-past-plans-section" style="display:none;">
+        <div class="tp-past-plans-header" id="tpPastPlansToggle">
+          <span class="tp-past-plans-chevron">▶</span>
+          <span>Past Race Plans</span>
+          <span class="tp-past-plans-count" id="tpPastPlansCount">0</span>
+        </div>
+        <div class="tp-past-plans-body" id="tpPastPlansBody" style="display:none;"></div>
+      </div>
+
     </div>
   </div>
 
@@ -118,7 +128,7 @@
     </div>
   </div>
 
-  <!-- Confirm popup (yes/no) -->
+  <!-- Confirm popup -->
   <div id="tpConfirmPopup" class="tp-popup-overlay" style="display:none;">
     <div class="tp-popup">
       <div class="tp-popup-header">
@@ -128,6 +138,26 @@
       <div class="tp-popup-actions">
         <button id="tpConfirmCancel" class="tp-popup-cancel" type="button">Cancel</button>
         <button id="tpConfirmOk" class="tp-popup-save" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Race Result popup -->
+  <div id="tpRaceResultPopup" class="tp-popup-overlay" style="display:none;">
+    <div class="tp-popup tp-popup-wide">
+      <div class="tp-popup-header">
+        <h3>How did your race go?</h3>
+      </div>
+      <p class="tp-popup-sub">Log how each day went. You can leave any day blank.</p>
+      <label class="tp-field-label">Day 1</label>
+      <input type="text" id="tpFinishDay1" class="tp-input" placeholder="e.g. 1st in moto, 2nd in main" autocomplete="off">
+      <label class="tp-field-label">Day 2</label>
+      <input type="text" id="tpFinishDay2" class="tp-input" placeholder="e.g. Crashed in semi" autocomplete="off">
+      <label class="tp-field-label">Day 3</label>
+      <input type="text" id="tpFinishDay3" class="tp-input" placeholder="e.g. 3rd overall" autocomplete="off">
+      <div class="tp-popup-actions">
+        <button id="tpRaceResultCancel" class="tp-popup-cancel" type="button">Later</button>
+        <button id="tpRaceResultSave" class="tp-popup-save" type="button">Save &amp; Archive</button>
       </div>
     </div>
   </div>
