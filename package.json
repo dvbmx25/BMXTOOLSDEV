@@ -1,7 +1,0 @@
-{
-  "name": "bmxtoolsdev",
-  "version": "1.0.0",
-  "scripts": { "build": "gulp build"  },
-  "devDependencies": { "gulp": "^5.0.0", "gulp-replace" = "^1.1.4"
-  }
-}
