@@ -6,6 +6,8 @@
 
   const authPopup     = document.getElementById('trainingAuthPopup');
   const wizard        = document.getElementById('tpWizard');
+  const wizardTitle   = document.getElementById('tpWizardTitle');
+  const wizardCancel  = document.getElementById('tpWizardCancel');
   const sheet         = document.getElementById('tpSheet');
   const goalInput     = document.getElementById('tpGoal');
   const raceNameInput = document.getElementById('tpRaceName');
@@ -19,6 +21,7 @@
   const addCategoryBtn= document.getElementById('tpAddCategoryBtn');
   const editPlanBtn   = document.getElementById('tpEditPlan');
 
+  // Number popup
   const numberPopup   = document.getElementById('tpNumberPopup');
   const numberPopupTitle = document.getElementById('tpNumberPopupTitle');
   const numberPopupSub   = document.getElementById('tpNumberPopupSub');
@@ -26,7 +29,14 @@
   const numberConfirm = document.getElementById('tpNumberConfirm');
   const numberCancel  = document.getElementById('tpNumberCancel');
 
-  // Default training days: Mon, Wed, Fri (1 = Mon, 3 = Wed, 5 = Fri in JS getDay())
+  // Category popup
+  const categoryPopup       = document.getElementById('tpCategoryPopup');
+  const categoryName        = document.getElementById('tpCategoryName');
+  const categoryFirstWorkout= document.getElementById('tpCategoryFirstWorkout');
+  const categoryConfirm     = document.getElementById('tpCategoryConfirm');
+  const categoryCancel      = document.getElementById('tpCategoryCancel');
+
+  // Default training days: Mon, Wed, Fri
   const DEFAULT_TRAINING_DAYS = [1, 3, 5];
 
   const SEED_LIBRARY = {
@@ -48,7 +58,6 @@
     'Custom': []
   };
 
-  // Workouts that prompt for a number when dragged
   const NUMBER_PROMPT_WORKOUTS = new Set([
     'Pump laps',
     'X half laps, first half',
@@ -62,6 +71,7 @@
   let sessions = [];
   let library = [];
   let initialized = false;
+  let editingPlan = false;
 
   async function boot() {
     if (!window.BMX || !window.BMX.sb) {
@@ -138,7 +148,8 @@
 
     Object.keys(grouped).forEach(category => {
       const group = document.createElement('div');
-      group.className = 'tp-lib-group';
+      // All categories start COLLAPSED
+      group.className = 'tp-lib-group collapsed';
 
       const header = document.createElement('div');
       header.className = 'tp-lib-header';
@@ -202,17 +213,45 @@
     });
   }
 
-  addCategoryBtn.addEventListener('click', async () => {
-    const name = window.prompt('New category name:');
-    if (!name || !name.trim()) return;
-    const firstWorkout = window.prompt(`Add first workout to "${name}":`);
-    if (!firstWorkout || !firstWorkout.trim()) return;
+  /* ─────────────── ADD CATEGORY POPUP ─────────────── */
+  function openCategoryPopup() {
+    categoryName.value = '';
+    categoryFirstWorkout.value = '';
+    categoryPopup.style.display = 'flex';
+    setTimeout(() => categoryName.focus(), 30);
+  }
+
+  function closeCategoryPopup() {
+    categoryPopup.style.display = 'none';
+  }
+
+  addCategoryBtn.addEventListener('click', openCategoryPopup);
+  categoryCancel.addEventListener('click', closeCategoryPopup);
+  categoryPopup.addEventListener('click', (e) => {
+    if (e.target === categoryPopup) closeCategoryPopup();
+  });
+
+  categoryConfirm.addEventListener('click', async () => {
+    const name = categoryName.value.trim();
+    const firstWorkout = categoryFirstWorkout.value.trim();
+    if (!name) { categoryName.focus(); return; }
+    if (!firstWorkout) { categoryFirstWorkout.focus(); return; }
+
     const { data, error } = await sb.from('workout_library').insert({
-      user_id: user.id, category: name.trim(), name: firstWorkout.trim(), sort_order: 0
+      user_id: user.id, category: name, name: firstWorkout, sort_order: 0
     }).select().single();
     if (error) { console.error('add category:', error); return; }
     library.push(data);
+    closeCategoryPopup();
     renderLibrary();
+  });
+
+  categoryFirstWorkout.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); categoryConfirm.click(); }
+  });
+  categoryName.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); categoryFirstWorkout.focus(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeCategoryPopup(); }
   });
 
   /* ─────────────── PLAN ─────────────── */
@@ -227,7 +266,7 @@
     if (error) { console.error('plan load:', error); return; }
 
     if (!plans || plans.length === 0) {
-      showWizard();
+      showWizard(false);
       return;
     }
 
@@ -248,14 +287,21 @@
     sessions = data || [];
   }
 
-  function showWizard() {
+  // showWizard(true) → editing an existing plan (Cancel available, title "Edit")
+  // showWizard(false) → first-time setup
+  function showWizard(isEdit) {
+    editingPlan = isEdit;
     wizard.style.display = '';
     sheet.style.display = 'none';
 
-    if (!raceDateInput.value) {
-      const d = new Date();
-      d.setDate(d.getDate() + 42);
-      raceDateInput.value = d.toISOString().slice(0, 10);
+    if (isEdit) {
+      wizardTitle.textContent = 'Edit your training plan';
+      buildBtn.textContent = 'Save Plan';
+      wizardCancel.style.display = '';
+    } else {
+      wizardTitle.textContent = 'Set up your training plan';
+      buildBtn.textContent = 'Build My Plan';
+      wizardCancel.style.display = 'none';
     }
 
     if (plan) {
@@ -263,7 +309,20 @@
       raceNameInput.value = plan.race_name || '';
       raceDateInput.value = plan.race_date || '';
     }
+
+    if (!raceDateInput.value) {
+      const d = new Date();
+      d.setDate(d.getDate() + 42);
+      raceDateInput.value = d.toISOString().slice(0, 10);
+    }
   }
+
+  wizardCancel.addEventListener('click', () => {
+    // Return to the dashboard without saving changes
+    if (plan) {
+      renderDashboard();
+    }
+  });
 
   buildBtn.addEventListener('click', async () => {
     const goal = goalInput.value.trim();
@@ -281,7 +340,8 @@
       }).eq('id', plan.id);
       if (error) { console.error('plan update:', error); return; }
 
-      const regen = window.confirm('Do you want to rebuild your training sessions?\n\nOK = rebuild sessions from today until race day (past journals are kept).\nCancel = only add any new sessions that don\'t exist yet.');
+      const regen = window.confirm('Do you want to rebuild your training sessions?\n\nOK = rebuild future sessions until race day (past journals are kept).\nCancel = only add missing sessions.');
+
       if (regen) {
         await rebuildSessions(trainingDays, raceDate);
       } else {
@@ -314,7 +374,7 @@
           plan_id: plan.id,
           user_id: user.id,
           session_date: cursor.toISOString().slice(0, 10),
-          focus: plan.goal || '',
+          focus: '',
           journal: '',
           completed: false
         });
@@ -347,7 +407,7 @@
           plan_id: plan.id,
           user_id: user.id,
           session_date: cursor.toISOString().slice(0, 10),
-          focus: plan.goal || '',
+          focus: '',
           journal: '',
           completed: false
         });
@@ -371,7 +431,7 @@
       if (trainingDays.includes(cursor.getDay()) && !existing.has(iso)) {
         rows.push({
           plan_id: plan.id, user_id: user.id,
-          session_date: iso, focus: plan.goal || '',
+          session_date: iso, focus: '',
           journal: '', completed: false
         });
       }
@@ -384,7 +444,7 @@
   }
 
   editPlanBtn.addEventListener('click', () => {
-    showWizard();
+    showWizard(true);
   });
 
   /* ─────────────── NUMBER POPUP ─────────────── */
@@ -517,6 +577,15 @@
     return wrap;
   }
 
+  // Parse "Gate starts\n30ft sprints\nManuals" into an array of workout strings
+  function parseFocus(focus) {
+    if (!focus) return [];
+    return focus.split('\n').map(x => x.trim()).filter(Boolean);
+  }
+  function joinFocus(list) {
+    return list.join('\n');
+  }
+
   function renderSessionRow(s, isPast) {
     const row = document.createElement('div');
     row.className = 'tp-session-row' + (s.completed ? ' completed' : '');
@@ -525,14 +594,25 @@
     const d = new Date(s.session_date + 'T00:00:00');
     const dateLabel = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
+    const workouts = parseFocus(s.focus);
+
+    const workoutsHtml = workouts.length
+      ? workouts.map((w, i) => `
+          <li class="tp-workout-item" data-index="${i}">
+            <span class="tp-workout-name">${escapeHtml(w)}</span>
+            <button class="tp-workout-remove" type="button" title="Remove">×</button>
+          </li>
+        `).join('')
+      : `<li class="tp-workout-empty">Drop a workout here…</li>`;
+
     row.innerHTML = `
       <div class="tp-session-head">
         <label class="tp-session-check" title="Mark complete">
           <input type="checkbox" ${s.completed ? 'checked' : ''}>
         </label>
         <div class="tp-session-date">${dateLabel}</div>
-        <div class="tp-session-focus">${escapeHtml(s.focus || 'Drop a workout here…')}</div>
       </div>
+      <ul class="tp-workout-list">${workoutsHtml}</ul>
       <div class="tp-session-body">
         <textarea class="tp-session-journal" placeholder="How did it go?">${escapeHtml(s.journal || '')}</textarea>
       </div>
@@ -546,7 +626,20 @@
       await sb.from('training_sessions').update({ completed, updated_at: new Date().toISOString() }).eq('id', s.id);
     });
 
-    // Journal auto-save on blur
+    // Remove a single workout from the list
+    row.querySelectorAll('.tp-workout-remove').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const idx = Number(btn.closest('.tp-workout-item').dataset.index);
+        const list = parseFocus(s.focus);
+        list.splice(idx, 1);
+        s.focus = joinFocus(list);
+        await sb.from('training_sessions').update({ focus: s.focus, updated_at: new Date().toISOString() }).eq('id', s.id);
+        renderSessionRowReplace(row, s, isPast);
+      });
+    });
+
+    // Journal auto-save
     const journalEl = row.querySelector('.tp-session-journal');
     journalEl.addEventListener('blur', async () => {
       const journal = journalEl.value;
@@ -556,7 +649,7 @@
       flashRow(row);
     });
 
-    // Drop target for workouts
+    // Drop target — APPENDS a workout
     row.addEventListener('dragover', (e) => {
       e.preventDefault();
       row.classList.add('drop-target');
@@ -570,20 +663,29 @@
       let payload;
       try { payload = JSON.parse(data); } catch { return; }
 
-      let newFocus = payload.name;
+      let workoutText = payload.name;
       if (NUMBER_PROMPT_WORKOUTS.has(payload.name)) {
         const num = await openNumberPopup(payload.name);
         if (num === null) return;
-        newFocus = payload.name.replace(/^X\s+/i, `${num} `);
+        workoutText = payload.name.replace(/^X\s+/i, `${num} `);
       }
 
-      s.focus = newFocus;
-      row.querySelector('.tp-session-focus').textContent = newFocus;
-      await sb.from('training_sessions').update({ focus: newFocus, updated_at: new Date().toISOString() }).eq('id', s.id);
+      const list = parseFocus(s.focus);
+      list.push(workoutText);
+      s.focus = joinFocus(list);
+      await sb.from('training_sessions').update({ focus: s.focus, updated_at: new Date().toISOString() }).eq('id', s.id);
+      renderSessionRowReplace(row, s, isPast);
       flashRow(row);
     });
 
     return row;
+  }
+
+  // Re-render a single session row in place (after add/remove of workouts)
+  function renderSessionRowReplace(oldRow, s, isPast) {
+    const newRow = renderSessionRow(s, isPast);
+    oldRow.replaceWith(newRow);
+    flashRow(newRow);
   }
 
   function flashRow(row) {
