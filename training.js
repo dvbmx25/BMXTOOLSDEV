@@ -1,279 +1,576 @@
+// training.js — training plan builder with Supabase, drag-drop workout library, and journal.
+
 (function () {
-  const grid = document.getElementById('tsGrid');
-  if (!grid) return;
+  const wrap = document.getElementById('trainingApp');
+  if (!wrap) return;
 
-  const monthLabel = document.getElementById('tsMonthLabel');
-  const prevBtn    = document.getElementById('tsPrev');
-  const nextBtn    = document.getElementById('tsNext');
-  const todayBtn   = document.getElementById('tsToday');
+  const authPopup     = document.getElementById('trainingAuthPopup');
+  const wizard        = document.getElementById('tpWizard');
+  const sheet         = document.getElementById('tpSheet');
+  const goalInput     = document.getElementById('tpGoal');
+  const raceNameInput = document.getElementById('tpRaceName');
+  const raceDateInput = document.getElementById('tpRaceDate');
+  const daysPicker    = document.getElementById('tpDaysPicker');
+  const buildBtn      = document.getElementById('tpBuildBtn');
+  const goalDisplay   = document.getElementById('tpGoalDisplay');
+  const raceDisplay   = document.getElementById('tpRaceDisplay');
+  const countdownEl   = document.getElementById('tpCountdown');
+  const sessionsList  = document.getElementById('tpSessionsList');
+  const libraryEl     = document.getElementById('tpLibrary');
+  const addCategoryBtn= document.getElementById('tpAddCategoryBtn');
+  const editPlanBtn   = document.getElementById('tpEditPlan');
 
-  const LS_KEY = 'bmxtools.training';
-  const MONTHS = ['January','February','March','April','May','June',
-                  'July','August','September','October','November','December'];
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  /* ─────────────── STORAGE ─────────────── */
-  function readAll() {
-    try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
-    catch { return {}; }
-  }
-  function writeAll(data) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch {}
-  }
-  function monthKey(y, m) {
-    return `${y}-${String(m + 1).padStart(2, '0')}`;
-  }
+  const SEED_LIBRARY = {
+    'Gate Work': [
+      'Gate starts — gate form',
+      '30ft sprints',
+      '15-30ft uphill sprints'
+    ],
+    'Skills': [
+      'Pump laps',
+      'Manuals',
+      'Double manuals'
+    ],
+    'Endurance': [
+      'X half laps, first half',
+      'X half laps, second half',
+      'X full laps'
+    ],
+    'Custom': []
+  };
 
-  /* ─────────────── STATE ─────────────── */
-  const now = new Date();
-  let viewYear  = now.getFullYear();
-  let viewMonth = now.getMonth();
+  // Workouts that prompt for a number when dragged
+  const NUMBER_PROMPT_WORKOUTS = new Set([
+    'Pump laps',
+    'X half laps, first half',
+    'X half laps, second half',
+    'X full laps'
+  ]);
 
-  /* ─────────────── RENDER ─────────────── */
-  function render() {
-    monthLabel.textContent = `${MONTHS[viewMonth]} ${viewYear}`;
-    grid.innerHTML = '';
+  let sb = null;
+  let user = null;
+  let plan = null;
+  let sessions = [];
+  let library = []; // [{ id, category, name, sort_order }]
 
-    const firstDow = new Date(viewYear, viewMonth, 1).getDay();
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-
-    for (let i = 0; i < firstDow; i++) {
-      const blank = document.createElement('div');
-      blank.className = 'ts-day ts-day-blank';
-      grid.appendChild(blank);
+  // ─────────────── BOOT ───────────────
+  async function boot() {
+    if (!window.BMX || !window.BMX.sb) {
+      console.warn('training.js: waiting for supabase client');
+      setTimeout(boot, 100);
+      return;
     }
+    if (window.BMX.authReady) await window.BMX.authReady;
+    sb = window.BMX.sb;
+    user = window.BMX.auth?.getUser?.() || null;
 
-    const all = readAll();
-    const mk = monthKey(viewYear, viewMonth);
-    const monthData = all[mk] || {};
-
-    const todayY = now.getFullYear();
-    const todayM = now.getMonth();
-    const todayD = now.getDate();
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const cell = document.createElement('div');
-      cell.className = 'ts-day';
-      if (viewYear === todayY && viewMonth === todayM && d === todayD) {
-        cell.classList.add('ts-today');
-      }
-      cell.dataset.day = d;
-      renderDayCell(cell, d, monthData[d] || null);
-      grid.appendChild(cell);
-    }
-  }
-
-  function renderDayCell(cell, day, data) {
-    cell.innerHTML = '';
-    cell.classList.remove('ts-day-training', 'ts-day-has-race');
-
-    const hasTraining = !!(data && (data.goals || data.journal));
-    const hasRace = !!(data && data.race && (data.race.name || data.race.location));
-    const isTrainingMarked = !!data; // Day has any entry at all
-
-    if (!isTrainingMarked && !hasRace) {
-      // Completely empty day
-      cell.innerHTML = `
-        <div class="ts-day-num">${day}</div>
-        <button class="ts-train-btn" type="button">+ Train</button>
-      `;
-      cell.querySelector('.ts-train-btn').addEventListener('click', () => {
-        openDayPopup(day, null);
-      });
+    if (!user) {
+      showAuthPopup();
       return;
     }
 
-    if (hasTraining) cell.classList.add('ts-day-training');
-    if (hasRace) cell.classList.add('ts-day-has-race');
-
-    // Build the top row: day number, training badge, race badge
-    const trainingBadge = hasTraining
-      ? `<span class="ts-badge">✓ Training</span>`
-      : '';
-
-    const raceBadge = hasRace
-      ? `<span class="ts-race-badge" title="${escapeHtml(data.race.name || 'Race')}">🏁 ${escapeHtml(data.race.name || 'Race')}</span>`
-      : '';
-
-    const preview = hasTraining && data.goals
-      ? (data.goals || '').trim().split('\n')[0].slice(0, 60)
-      : '';
-
-    const hasJournal = hasTraining && !!(data.journal || '').trim();
-
-    cell.innerHTML = `
-      <div class="ts-day-top">
-        <div class="ts-day-num">${day}</div>
-        ${trainingBadge}
-      </div>
-      ${raceBadge}
-      ${preview ? `<div class="ts-day-preview">${escapeHtml(preview)}${preview.length === 60 ? '…' : ''}</div>` : ''}
-      ${hasJournal ? `<div class="ts-day-hint">📝 Journal saved</div>` : ''}
-      <button class="ts-edit-btn" type="button">${hasTraining ? 'Edit' : 'Add Training'}</button>
-    `;
-
-    cell.querySelector('.ts-edit-btn').addEventListener('click', () => {
-      openDayPopup(day, data);
-    });
+    wrap.style.display = '';
+    await ensureLibrary();
+    await loadPlan();
   }
 
-  /* ─────────────── DAY POPUP ─────────────── */
-  let activePopup = null;
+  function showAuthPopup() {
+    authPopup.style.display = 'flex';
+    wrap.style.display = 'none';
+  }
 
-  function openDayPopup(day, existingData) {
-    closeDayPopup();
+  // ─────────────── WORKOUT LIBRARY ───────────────
+  async function ensureLibrary() {
+    const { data, error } = await sb
+      .from('workout_library')
+      .select('*')
+      .order('category', { ascending: true })
+      .order('sort_order', { ascending: true });
 
-    const sheet = document.getElementById('trainingSheet');
-    if (!sheet) return;
+    if (error) { console.error('library load:', error); return; }
 
-    const label = new Date(viewYear, viewMonth, day)
-      .toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-
-    const race = existingData?.race || null;
-    const hasRace = !!(race && (race.name || race.location));
-
-    // Default race date to the cell's day
-    const defaultRaceDate = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-    const overlay = document.createElement('div');
-    overlay.className = 'ts-popup-overlay';
-    overlay.innerHTML = `
-      <div class="ts-popup" role="dialog" aria-modal="true">
-        <div class="ts-popup-header">
-          <h3>${escapeHtml(label)}</h3>
-          <button class="ts-popup-close" type="button" title="Close">×</button>
-        </div>
-
-        <div class="ts-race-section">
-          <button class="ts-race-toggle" type="button" ${hasRace ? 'style="display:none;"' : ''}>🏁 Schedule a Race</button>
-          <div class="ts-race-fields" ${hasRace ? '' : 'style="display:none;"'}>
-            <div class="ts-race-heading">
-              <span>🏁 Race Scheduled</span>
-              <button class="ts-race-remove" type="button" title="Remove race">Remove</button>
-            </div>
-            <label class="ts-field-label">Race Name</label>
-            <input type="text" class="ts-text-input ts-race-name" placeholder="e.g. State Qualifier"
-                   value="${escapeHtml(race?.name || '')}">
-            <label class="ts-field-label">Location</label>
-            <input type="text" class="ts-text-input ts-race-location" placeholder="Track / city"
-                   value="${escapeHtml(race?.location || '')}">
-            <label class="ts-field-label">Race Date</label>
-            <input type="date" class="ts-text-input ts-race-date" value="${escapeHtml(race?.date || defaultRaceDate)}">
-          </div>
-        </div>
-
-        <label class="ts-field-label">Goals</label>
-        <textarea class="ts-textarea ts-popup-goals" placeholder="What to work on…">${escapeHtml(existingData?.goals || '')}</textarea>
-        <label class="ts-field-label">Journal</label>
-        <textarea class="ts-textarea ts-popup-journal" placeholder="How it went…">${escapeHtml(existingData?.journal || '')}</textarea>
-        <div class="ts-popup-actions">
-          ${existingData ? '<button class="ts-popup-clear" type="button">Clear Day</button>' : ''}
-          <div class="ts-popup-spacer"></div>
-          <button class="ts-popup-cancel" type="button">Cancel</button>
-          <button class="ts-popup-save" type="button">Save</button>
-        </div>
-      </div>
-    `;
-
-    sheet.appendChild(overlay);
-    activePopup = overlay;
-
-    const goalsEl    = overlay.querySelector('.ts-popup-goals');
-    const journalEl  = overlay.querySelector('.ts-popup-journal');
-    const raceToggle = overlay.querySelector('.ts-race-toggle');
-    const raceFields = overlay.querySelector('.ts-race-fields');
-    const raceName   = overlay.querySelector('.ts-race-name');
-    const raceLoc    = overlay.querySelector('.ts-race-location');
-    const raceDate   = overlay.querySelector('.ts-race-date');
-    const raceRemove = overlay.querySelector('.ts-race-remove');
-
-    setTimeout(() => goalsEl.focus(), 30);
-
-    overlay.querySelector('.ts-popup-close').addEventListener('click', closeDayPopup);
-    overlay.querySelector('.ts-popup-cancel').addEventListener('click', closeDayPopup);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeDayPopup();
-    });
-
-    raceToggle.addEventListener('click', () => {
-      raceToggle.style.display = 'none';
-      raceFields.style.display = '';
-      raceName.focus();
-    });
-
-    raceRemove.addEventListener('click', () => {
-      raceName.value = '';
-      raceLoc.value = '';
-      raceDate.value = defaultRaceDate;
-      raceFields.style.display = 'none';
-      raceToggle.style.display = '';
-    });
-
-    overlay.querySelector('.ts-popup-save').addEventListener('click', () => {
-      const all = readAll();
-      const mk = monthKey(viewYear, viewMonth);
-      if (!all[mk]) all[mk] = {};
-
-      const goals   = goalsEl.value.trim();
-      const journal = journalEl.value.trim();
-
-      const raceOn = raceFields.style.display !== 'none';
-      const newRace = raceOn ? {
-        name: raceName.value.trim(),
-        location: raceLoc.value.trim(),
-        date: raceDate.value || defaultRaceDate
-      } : null;
-
-      const hasAnything =
-        goals || journal || (newRace && (newRace.name || newRace.location));
-
-      if (!hasAnything) {
-        // Nothing to save — remove the day entirely
-        delete all[mk][day];
-        if (Object.keys(all[mk]).length === 0) delete all[mk];
+    if (!data || data.length === 0) {
+      // Seed the library on first load
+      const rows = [];
+      Object.entries(SEED_LIBRARY).forEach(([category, items]) => {
+        items.forEach((name, i) => {
+          rows.push({ user_id: user.id, category, name, sort_order: i });
+        });
+      });
+      if (rows.length) {
+        const { error: insertErr } = await sb.from('workout_library').insert(rows);
+        if (insertErr) console.error('seed library:', insertErr);
+        const { data: fresh } = await sb
+          .from('workout_library')
+          .select('*')
+          .order('category', { ascending: true })
+          .order('sort_order', { ascending: true });
+        library = fresh || [];
       } else {
-        all[mk][day] = { goals, journal };
-        if (newRace && (newRace.name || newRace.location)) {
-          all[mk][day].race = newRace;
-        }
+        library = [];
       }
-
-      writeAll(all);
-
-      const cellEl = grid.querySelector(`.ts-day[data-day="${day}"]`);
-      if (cellEl) {
-        renderDayCell(cellEl, day, all[mk]?.[day] || null);
-      }
-      closeDayPopup();
-    });
-
-    const clearBtn = overlay.querySelector('.ts-popup-clear');
-    if (clearBtn) clearBtn.addEventListener('click', () => {
-      if (!window.confirm('Clear everything on this day?')) return;
-      const all = readAll();
-      const mk = monthKey(viewYear, viewMonth);
-      if (all[mk] && all[mk][day]) {
-        delete all[mk][day];
-        if (Object.keys(all[mk]).length === 0) delete all[mk];
-        writeAll(all);
-      }
-      const cellEl = grid.querySelector(`.ts-day[data-day="${day}"]`);
-      if (cellEl) renderDayCell(cellEl, day, null);
-      closeDayPopup();
-    });
-
-    document.addEventListener('keydown', escClose);
-  }
-
-  function escClose(e) {
-    if (e.key === 'Escape') closeDayPopup();
-  }
-
-  function closeDayPopup() {
-    if (activePopup) {
-      activePopup.remove();
-      activePopup = null;
+    } else {
+      library = data;
     }
-    document.removeEventListener('keydown', escClose);
+  }
+
+  function renderLibrary() {
+    libraryEl.innerHTML = '';
+    const grouped = {};
+    library.forEach(w => {
+      if (!grouped[w.category]) grouped[w.category] = [];
+      grouped[w.category].push(w);
+    });
+
+    // Ensure Custom always appears
+    if (!grouped['Custom']) grouped['Custom'] = [];
+
+    Object.keys(grouped).forEach(category => {
+      const group = document.createElement('div');
+      group.className = 'tp-lib-group';
+
+      const header = document.createElement('div');
+      header.className = 'tp-lib-header';
+      header.innerHTML = `<span class="tp-lib-toggle">▼</span> ${escapeHtml(category)} <span class="tp-lib-count">${grouped[category].length}</span>`;
+      header.addEventListener('click', () => group.classList.toggle('collapsed'));
+      group.appendChild(header);
+
+      const body = document.createElement('div');
+      body.className = 'tp-lib-body';
+
+      grouped[category].forEach(w => {
+        const item = document.createElement('div');
+        item.className = 'tp-lib-item';
+        item.draggable = true;
+        item.dataset.id = w.id;
+        item.dataset.category = w.category;
+        item.dataset.name = w.name;
+        item.innerHTML = `
+          <span class="tp-lib-name">${escapeHtml(w.name)}</span>
+          <button class="tp-lib-del" type="button" title="Delete">×</button>
+        `;
+        item.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', JSON.stringify({ id: w.id, name: w.name }));
+          item.classList.add('dragging');
+        });
+        item.addEventListener('dragend', () => item.classList.remove('dragging'));
+        item.querySelector('.tp-lib-del').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!window.confirm(`Delete "${w.name}" from your library?`)) return;
+          await sb.from('workout_library').delete().eq('id', w.id);
+          library = library.filter(x => x.id !== w.id);
+          renderLibrary();
+        });
+        body.appendChild(item);
+      });
+
+      // Add workout input
+      const addRow = document.createElement('div');
+      addRow.className = 'tp-lib-add-row';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = '+ Add workout';
+      input.className = 'tp-lib-add-input';
+      input.addEventListener('keydown', async (e) => {
+        if (e.key !== 'Enter') return;
+        const name = input.value.trim();
+        if (!name) return;
+        const sortOrder = (grouped[category].length || 0);
+        const { data, error } = await sb.from('workout_library').insert({
+          user_id: user.id, category, name, sort_order: sortOrder
+        }).select().single();
+        if (error) { console.error('add workout:', error); return; }
+        library.push(data);
+        input.value = '';
+        renderLibrary();
+      });
+      addRow.appendChild(input);
+      body.appendChild(addRow);
+
+      group.appendChild(body);
+      libraryEl.appendChild(group);
+    });
+  }
+
+  addCategoryBtn.addEventListener('click', async () => {
+    const name = window.prompt('New category name:');
+    if (!name || !name.trim()) return;
+    // We create a category by inserting a placeholder — but the user asked for no auto-fill,
+    // so instead just add it as an empty category client-side until a workout is added.
+    // Simplest: add a workout to that category immediately.
+    const firstWorkout = window.prompt(`Add first workout to "${name}":`);
+    if (!firstWorkout || !firstWorkout.trim()) return;
+    const { data, error } = await sb.from('workout_library').insert({
+      user_id: user.id, category: name.trim(), name: firstWorkout.trim(), sort_order: 0
+    }).select().single();
+    if (error) { console.error('add category:', error); return; }
+    library.push(data);
+    renderLibrary();
+  });
+
+  // ─────────────── PLAN ───────────────
+  async function loadPlan() {
+    const { data: plans, error } = await sb
+      .from('training_plans')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) { console.error('plan load:', error); return; }
+
+    if (!plans || plans.length === 0) {
+      showWizard();
+      return;
+    }
+
+    plan = plans[0];
+    await loadSessions();
+    renderDashboard();
+  }
+
+  async function loadSessions() {
+    const { data, error } = await sb
+      .from('training_sessions')
+      .select('*')
+      .eq('plan_id', plan.id)
+      .order('session_date', { ascending: true });
+
+    if (error) { console.error('sessions load:', error); return; }
+    sessions = data || [];
+  }
+
+  function showWizard() {
+    wizard.style.display = '';
+    sheet.style.display = 'none';
+
+    // Days picker
+    daysPicker.innerHTML = '';
+    DAYS.forEach((d, i) => {
+      const label = document.createElement('label');
+      label.className = 'tp-day-chip';
+      label.innerHTML = `<input type="checkbox" value="${i}"> ${d}`;
+      daysPicker.appendChild(label);
+    });
+
+    // Default race date: 6 weeks out
+    if (!raceDateInput.value) {
+      const d = new Date();
+      d.setDate(d.getDate() + 42);
+      raceDateInput.value = d.toISOString().slice(0, 10);
+    }
+
+    // Pre-fill if editing
+    if (plan) {
+      goalInput.value = plan.goal || '';
+      raceNameInput.value = plan.race_name || '';
+      raceDateInput.value = plan.race_date || '';
+      (plan.training_days || []).forEach(d => {
+        const cb = daysPicker.querySelector(`input[value="${d}"]`);
+        if (cb) cb.checked = true;
+      });
+    }
+  }
+
+  buildBtn.addEventListener('click', async () => {
+    const goal = goalInput.value.trim();
+    const raceName = raceNameInput.value.trim();
+    const raceDate = raceDateInput.value;
+    const trainingDays = Array.from(daysPicker.querySelectorAll('input:checked')).map(cb => Number(cb.value));
+
+    if (!goal) { alert('Please enter a goal.'); return; }
+    if (!raceDate) { alert('Please pick a race date.'); return; }
+    if (trainingDays.length === 0) { alert('Please pick at least one training day.'); return; }
+
+    if (plan) {
+      // Update existing plan
+      const { error } = await sb.from('training_plans').update({
+        goal, race_name: raceName, race_date: raceDate,
+        training_days: trainingDays, updated_at: new Date().toISOString()
+      }).eq('id', plan.id);
+      if (error) { console.error('plan update:', error); return; }
+
+      const regen = window.confirm('Do you want to rebuild your training sessions?\n\nOK = rebuild sessions from today until race day (past journals are kept).\nCancel = only add any new sessions that don\'t exist yet.');
+      if (regen) {
+        await rebuildSessions(trainingDays, raceDate);
+      } else {
+        await addMissingSessions(trainingDays, raceDate);
+      }
+
+      Object.assign(plan, { goal, race_name: raceName, race_date: raceDate, training_days: trainingDays });
+      await loadSessions();
+      renderDashboard();
+    } else {
+      // Create new plan
+      const { data, error } = await sb.from('training_plans').insert({
+        user_id: user.id, goal, race_name: raceName, race_date: raceDate, training_days: trainingDays
+      }).select().single();
+      if (error) { console.error('plan insert:', error); return; }
+      plan = data;
+      await generateSessions(trainingDays, raceDate);
+      await loadSessions();
+      renderDashboard();
+    }
+  });
+
+  async function generateSessions(trainingDays, raceDate) {
+    const rows = [];
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = new Date(raceDate + 'T00:00:00');
+    const cursor = new Date(today);
+    while (cursor <= end) {
+      if (trainingDays.includes(cursor.getDay())) {
+        rows.push({
+          plan_id: plan.id,
+          user_id: user.id,
+          session_date: cursor.toISOString().slice(0, 10),
+          focus: plan.goal || '',
+          journal: '',
+          completed: false
+        });
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (rows.length) {
+      const { error } = await sb.from('training_sessions').insert(rows);
+      if (error) console.error('session insert:', error);
+    }
+  }
+
+  async function rebuildSessions(trainingDays, raceDate) {
+    // Delete all future (non-completed) sessions
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const { error: delErr } = await sb
+      .from('training_sessions')
+      .delete()
+      .eq('plan_id', plan.id)
+      .gte('session_date', todayStr)
+      .eq('completed', false);
+    if (delErr) { console.error('session cleanup:', delErr); return; }
+
+    const rows = [];
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = new Date(raceDate + 'T00:00:00');
+    const cursor = new Date(today);
+    while (cursor <= end) {
+      if (trainingDays.includes(cursor.getDay())) {
+        rows.push({
+          plan_id: plan.id,
+          user_id: user.id,
+          session_date: cursor.toISOString().slice(0, 10),
+          focus: plan.goal || '',
+          journal: '',
+          completed: false
+        });
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (rows.length) {
+      const { error } = await sb.from('training_sessions').insert(rows);
+      if (error) console.error('session rebuild:', error);
+    }
+  }
+
+  async function addMissingSessions(trainingDays, raceDate) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const existing = new Set(sessions.map(s => s.session_date));
+    const rows = [];
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = new Date(raceDate + 'T00:00:00');
+    const cursor = new Date(today);
+    while (cursor <= end) {
+      const iso = cursor.toISOString().slice(0, 10);
+      if (trainingDays.includes(cursor.getDay()) && !existing.has(iso)) {
+        rows.push({
+          plan_id: plan.id, user_id: user.id,
+          session_date: iso, focus: plan.goal || '',
+          journal: '', completed: false
+        });
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (rows.length) {
+      const { error } = await sb.from('training_sessions').insert(rows);
+      if (error) console.error('session add:', error);
+    }
+  }
+
+  editPlanBtn.addEventListener('click', () => {
+    showWizard();
+  });
+
+  // ─────────────── DASHBOARD ───────────────
+  function renderDashboard() {
+    wizard.style.display = 'none';
+    sheet.style.display = '';
+
+    goalDisplay.textContent = plan.goal || '—';
+    raceDisplay.textContent = `${plan.race_name || 'Race'} · ${formatDate(plan.race_date)}`;
+
+    // Countdown
+    if (plan.race_date) {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const race = new Date(plan.race_date + 'T00:00:00');
+      const days = Math.round((race - today) / (1000 * 60 * 60 * 24));
+      if (days > 0) countdownEl.textContent = `${days} day${days === 1 ? '' : 's'} until race`;
+      else if (days === 0) countdownEl.textContent = 'Race day!';
+      else countdownEl.textContent = `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} since race`;
+    } else {
+      countdownEl.textContent = '';
+    }
+
+    renderSessions();
+    renderLibrary();
+  }
+
+  function renderSessions() {
+    sessionsList.innerHTML = '';
+    if (!sessions.length) {
+      sessionsList.innerHTML = '<p class="tp-empty">No sessions yet. Click Edit Plan to generate your schedule.</p>';
+      return;
+    }
+
+    // Group by week starting Sunday
+    const groups = {};
+    const today = new Date(); today.setHours(0,0,0,0);
+    sessions.forEach(s => {
+      const d = new Date(s.session_date + 'T00:00:00');
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - d.getDay());
+      const key = weekStart.toISOString().slice(0, 10);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(s);
+    });
+
+    const pastGroups = [];
+    const currentAndFuture = [];
+
+    Object.entries(groups).forEach(([key, list]) => {
+      const weekStart = new Date(key + 'T00:00:00');
+      const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+      const isPast = weekEnd < today;
+      (isPast ? pastGroups : currentAndFuture).push({ key, list, weekStart, weekEnd });
+    });
+
+    currentAndFuture.forEach(g => sessionsList.appendChild(renderWeekGroup(g, false)));
+
+    if (pastGroups.length) {
+      const pastWrap = document.createElement('div');
+      pastWrap.className = 'tp-past-wrap';
+      const pastHeader = document.createElement('button');
+      pastHeader.className = 'tp-past-toggle';
+      pastHeader.textContent = `▼ Past Sessions (${pastGroups.reduce((a, g) => a + g.list.length, 0)})`;
+      pastWrap.appendChild(pastHeader);
+      const pastBody = document.createElement('div');
+      pastBody.className = 'tp-past-body';
+      pastBody.style.display = 'none';
+      pastGroups.forEach(g => pastBody.appendChild(renderWeekGroup(g, true)));
+      pastWrap.appendChild(pastBody);
+      pastHeader.addEventListener('click', () => {
+        const open = pastBody.style.display !== 'none';
+        pastBody.style.display = open ? 'none' : '';
+        pastHeader.textContent = `${open ? '▼' : '▶'} Past Sessions (${pastGroups.reduce((a, g) => a + g.list.length, 0)})`;
+      });
+      sessionsList.appendChild(pastWrap);
+    }
+  }
+
+  function renderWeekGroup(g, isPast) {
+    const wrap = document.createElement('div');
+    wrap.className = 'tp-week-group';
+
+    const label = document.createElement('div');
+    label.className = 'tp-week-label';
+    const sameMonth = g.weekStart.getMonth() === g.weekEnd.getMonth();
+    label.textContent = sameMonth
+      ? `Week of ${g.weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+      : `${g.weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${g.weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    wrap.appendChild(label);
+
+    g.list.forEach(s => wrap.appendChild(renderSessionRow(s, isPast)));
+    return wrap;
+  }
+
+  function renderSessionRow(s, isPast) {
+    const row = document.createElement('div');
+    row.className = 'tp-session-row' + (s.completed ? ' completed' : '');
+    row.dataset.id = s.id;
+
+    const d = new Date(s.session_date + 'T00:00:00');
+    const dateLabel = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+    row.innerHTML = `
+      <div class="tp-session-head">
+        <label class="tp-session-check">
+          <input type="checkbox" ${s.completed ? 'checked' : ''}>
+        </label>
+        <div class="tp-session-date">${dateLabel}</div>
+        <div class="tp-session-focus">${escapeHtml(s.focus || 'Drop a workout here…')}</div>
+      </div>
+      <div class="tp-session-body">
+        <textarea class="tp-session-journal" placeholder="How did it go?">${escapeHtml(s.journal || '')}</textarea>
+      </div>
+    `;
+
+    // Complete toggle
+    row.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
+      const completed = e.target.checked;
+      s.completed = completed;
+      row.classList.toggle('completed', completed);
+      await sb.from('training_sessions').update({ completed, updated_at: new Date().toISOString() }).eq('id', s.id);
+    });
+
+    // Journal auto-save on blur
+    const journalEl = row.querySelector('.tp-session-journal');
+    journalEl.addEventListener('blur', async () => {
+      const journal = journalEl.value;
+      if (journal === (s.journal || '')) return;
+      s.journal = journal;
+      await sb.from('training_sessions').update({ journal, updated_at: new Date().toISOString() }).eq('id', s.id);
+      flashRow(row);
+    });
+
+    // Drop target for workouts
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      row.classList.add('drop-target');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+    row.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      row.classList.remove('drop-target');
+      const data = e.dataTransfer.getData('text/plain');
+      if (!data) return;
+      let payload;
+      try { payload = JSON.parse(data); } catch { return; }
+
+      let newFocus = payload.name;
+      if (NUMBER_PROMPT_WORKOUTS.has(payload.name)) {
+        const num = window.prompt(`How many for "${payload.name}"?`, '5');
+        if (num === null) return;
+        newFocus = payload.name.replace(/^X\s+/i, `${num} `);
+      }
+
+      s.focus = newFocus;
+      row.querySelector('.tp-session-focus').textContent = newFocus;
+      await sb.from('training_sessions').update({ focus: newFocus, updated_at: new Date().toISOString() }).eq('id', s.id);
+      flashRow(row);
+    });
+
+    return row;
+  }
+
+  function flashRow(row) {
+    row.classList.add('flash-saved');
+    setTimeout(() => row.classList.remove('flash-saved'), 700);
+  }
+
+  // ─────────────── HELPERS ───────────────
+  function formatDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
   function escapeHtml(str) {
@@ -285,23 +582,20 @@
       .replace(/'/g, '&#39;');
   }
 
-  /* ─────────────── NAVIGATION ─────────────── */
-  prevBtn.addEventListener('click', () => {
-    viewMonth--;
-    if (viewMonth < 0) { viewMonth = 11; viewYear--; }
-    render();
-  });
-  nextBtn.addEventListener('click', () => {
-    viewMonth++;
-    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
-    render();
-  });
-  todayBtn.addEventListener('click', () => {
-    viewYear  = now.getFullYear();
-    viewMonth = now.getMonth();
-    render();
-  });
+  // ─────────────── INIT ───────────────
+  boot();
 
-  /* ─────────────── INIT ─────────────── */
-  render();
+  // Re-check auth when it changes
+  if (window.BMX && window.BMX.auth) {
+    window.BMX.auth.onChange((u) => {
+      user = u;
+      if (user) {
+        authPopup.style.display = 'none';
+        wrap.style.display = '';
+        ensureLibrary().then(loadPlan);
+      } else {
+        showAuthPopup();
+      }
+    });
+  }
 })();
