@@ -74,6 +74,7 @@
   function writeDraft(data) {
     try { localStorage.setItem(LS_DRAFT, JSON.stringify(data)); } catch {}
   }
+
   /* ─────────────── SUPABASE WRITE HELPERS ─────────────── */
   async function saveMapToSupabase(name, pins) {
     const user = window.BMX?.auth?.getUser();
@@ -123,6 +124,7 @@
     }
     return { ok: true };
   }
+
   /* ─────────────── ONE-TIME MIGRATION ───────────────
      If the user is logged in, has nothing in Supabase yet,
      but has maps in localStorage, upload them once. */
@@ -252,7 +254,7 @@
     `;
   }
 
-   function buildMapsSidebar() {
+  function buildMapsSidebar() {
     pinsPanel.innerHTML = `
       <div class="map-library">
         <div class="map-library-group" id="group-seed">
@@ -288,7 +290,8 @@
       });
     });
   }
-    /* ─────────────── SIDEBAR BUILD DISPATCH ─────────────── */
+
+  /* ─────────────── SIDEBAR BUILD DISPATCH ─────────────── */
   if (page === 'maps') buildMapsSidebar();
   else buildCreatorSidebar();
 
@@ -605,7 +608,7 @@
 
   /* ─────────────── SAVE BUTTON ─────────────── */
   if (saveBtn) {
-    saveBtn.addEventListener('click', () => {
+    saveBtn.addEventListener('click', async () => {
       if (page === 'creator') {
         const suggested = getCreatorName() || 'My Map';
         const name = window.prompt('Name this map:', suggested);
@@ -657,8 +660,7 @@
           if (nameEl) nameEl.value = trimmed;
           window.alert(`Saved "${trimmed}" locally. Log in to sync it to your account.`);
         }
-      }
-       } else if (page === 'maps' && currentMap && !currentMap.seed) {
+      } else if (page === 'maps' && currentMap && !currentMap.seed) {
         const cleanPins = pins.map(p => ({ ...p }));
         const user = window.BMX?.auth?.getUser();
 
@@ -709,9 +711,8 @@
     URL.revokeObjectURL(url);
   }
 
-
   /* ─────────────── MAPS PAGE: MAP LIST ─────────────── */
-    function renderMapLists() {
+  function renderMapLists() {
     if (page !== 'maps') return;
 
     const seedList = document.getElementById('seedMapList');
@@ -784,8 +785,9 @@
     if (sectionsWrap) sectionsWrap.style.display = showEditor ? '' : 'none';
     if (divider) divider.style.display = showEditor ? '' : 'none';
   }
+
   // Wire map list clicks (delegated — list is re-rendered often)
-  pinsPanel.addEventListener('click', (e) => {
+  pinsPanel.addEventListener('click', async (e) => {
     if (page !== 'maps') return;
 
     const delBtn = e.target.closest('[data-delete-map]');
@@ -840,6 +842,7 @@
 
     loadMap(clickedId);
   });
+
   /* ─────────────── OUTSIDE CLICK CLOSES POPUP ─────────────── */
   document.addEventListener('click', (e) => {
     if (e.target.closest('.pin-popup') || e.target.closest('.pin') || e.target.closest('.pin-item')) return;
@@ -848,8 +851,8 @@
     closePopup();
   });
 
-   /* ─────────────── INIT ─────────────── */
-    async function boot() {
+  /* ─────────────── INIT ─────────────── */
+  async function boot() {
     // Wait for auth.js to finish its initial check before deciding where to load from.
     if (window.BMX?.authReady) {
       await window.BMX.authReady;
