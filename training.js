@@ -41,7 +41,6 @@
     'Custom': []
   };
 
-  // Workouts that prompt for a number when dragged
   const NUMBER_PROMPT_WORKOUTS = new Set([
     'Pump laps',
     'X half laps, first half',
@@ -53,16 +52,17 @@
   let user = null;
   let plan = null;
   let sessions = [];
-  let library = []; // [{ id, category, name, sort_order }]
+  let library = [];
+  let initialized = false;
 
-  // ─────────────── BOOT ───────────────
   async function boot() {
     if (!window.BMX || !window.BMX.sb) {
-      console.warn('training.js: waiting for supabase client');
       setTimeout(boot, 100);
       return;
     }
     if (window.BMX.authReady) await window.BMX.authReady;
+
+    // Assign sb locally NOW so any callback that fires can use it
     sb = window.BMX.sb;
     user = window.BMX.auth?.getUser?.() || null;
 
@@ -72,8 +72,11 @@
     }
 
     wrap.style.display = '';
-    await ensureLibrary();
-    await loadPlan();
+    if (!initialized) {
+      initialized = true;
+      await ensureLibrary();
+      await loadPlan();
+    }
   }
 
   function showAuthPopup() {
@@ -81,8 +84,8 @@
     wrap.style.display = 'none';
   }
 
-  // ─────────────── WORKOUT LIBRARY ───────────────
   async function ensureLibrary() {
+    if (!sb || !user) return;
     const { data, error } = await sb
       .from('workout_library')
       .select('*')
@@ -92,7 +95,6 @@
     if (error) { console.error('library load:', error); return; }
 
     if (!data || data.length === 0) {
-      // Seed the library on first load
       const rows = [];
       Object.entries(SEED_LIBRARY).forEach(([category, items]) => {
         items.forEach((name, i) => {
@@ -124,7 +126,6 @@
       grouped[w.category].push(w);
     });
 
-    // Ensure Custom always appears
     if (!grouped['Custom']) grouped['Custom'] = [];
 
     Object.keys(grouped).forEach(category => {
@@ -166,7 +167,6 @@
         body.appendChild(item);
       });
 
-      // Add workout input
       const addRow = document.createElement('div');
       addRow.className = 'tp-lib-add-row';
       const input = document.createElement('input');
@@ -197,9 +197,6 @@
   addCategoryBtn.addEventListener('click', async () => {
     const name = window.prompt('New category name:');
     if (!name || !name.trim()) return;
-    // We create a category by inserting a placeholder — but the user asked for no auto-fill,
-    // so instead just add it as an empty category client-side until a workout is added.
-    // Simplest: add a workout to that category immediately.
     const firstWorkout = window.prompt(`Add first workout to "${name}":`);
     if (!firstWorkout || !firstWorkout.trim()) return;
     const { data, error } = await sb.from('workout_library').insert({
@@ -210,8 +207,8 @@
     renderLibrary();
   });
 
-  // ─────────────── PLAN ───────────────
   async function loadPlan() {
+    if (!sb || !user) return;
     const { data: plans, error } = await sb
       .from('training_plans')
       .select('*')
@@ -231,6 +228,7 @@
   }
 
   async function loadSessions() {
+    if (!sb || !plan) return;
     const { data, error } = await sb
       .from('training_sessions')
       .select('*')
@@ -245,7 +243,6 @@
     wizard.style.display = '';
     sheet.style.display = 'none';
 
-    // Days picker
     daysPicker.innerHTML = '';
     DAYS.forEach((d, i) => {
       const label = document.createElement('label');
@@ -254,14 +251,12 @@
       daysPicker.appendChild(label);
     });
 
-    // Default race date: 6 weeks out
     if (!raceDateInput.value) {
       const d = new Date();
       d.setDate(d.getDate() + 42);
       raceDateInput.value = d.toISOString().slice(0, 10);
     }
 
-    // Pre-fill if editing
     if (plan) {
       goalInput.value = plan.goal || '';
       raceNameInput.value = plan.race_name || '';
@@ -284,7 +279,6 @@
     if (trainingDays.length === 0) { alert('Please pick at least one training day.'); return; }
 
     if (plan) {
-      // Update existing plan
       const { error } = await sb.from('training_plans').update({
         goal, race_name: raceName, race_date: raceDate,
         training_days: trainingDays, updated_at: new Date().toISOString()
@@ -302,7 +296,6 @@
       await loadSessions();
       renderDashboard();
     } else {
-      // Create new plan
       const { data, error } = await sb.from('training_plans').insert({
         user_id: user.id, goal, race_name: raceName, race_date: raceDate, training_days: trainingDays
       }).select().single();
@@ -339,7 +332,6 @@
   }
 
   async function rebuildSessions(trainingDays, raceDate) {
-    // Delete all future (non-completed) sessions
     const todayStr = new Date().toISOString().slice(0, 10);
     const { error: delErr } = await sb
       .from('training_sessions')
@@ -373,7 +365,6 @@
   }
 
   async function addMissingSessions(trainingDays, raceDate) {
-    const todayStr = new Date().toISOString().slice(0, 10);
     const existing = new Set(sessions.map(s => s.session_date));
     const rows = [];
     const today = new Date(); today.setHours(0,0,0,0);
@@ -400,7 +391,6 @@
     showWizard();
   });
 
-  // ─────────────── DASHBOARD ───────────────
   function renderDashboard() {
     wizard.style.display = 'none';
     sheet.style.display = '';
@@ -408,7 +398,6 @@
     goalDisplay.textContent = plan.goal || '—';
     raceDisplay.textContent = `${plan.race_name || 'Race'} · ${formatDate(plan.race_date)}`;
 
-    // Countdown
     if (plan.race_date) {
       const today = new Date(); today.setHours(0,0,0,0);
       const race = new Date(plan.race_date + 'T00:00:00');
@@ -431,7 +420,6 @@
       return;
     }
 
-    // Group by week starting Sunday
     const groups = {};
     const today = new Date(); today.setHours(0,0,0,0);
     sessions.forEach(s => {
@@ -513,7 +501,6 @@
       </div>
     `;
 
-    // Complete toggle
     row.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
       const completed = e.target.checked;
       s.completed = completed;
@@ -521,7 +508,6 @@
       await sb.from('training_sessions').update({ completed, updated_at: new Date().toISOString() }).eq('id', s.id);
     });
 
-    // Journal auto-save on blur
     const journalEl = row.querySelector('.tp-session-journal');
     journalEl.addEventListener('blur', async () => {
       const journal = journalEl.value;
@@ -531,7 +517,6 @@
       flashRow(row);
     });
 
-    // Drop target for workouts
     row.addEventListener('dragover', (e) => {
       e.preventDefault();
       row.classList.add('drop-target');
@@ -566,7 +551,6 @@
     setTimeout(() => row.classList.remove('flash-saved'), 700);
   }
 
-  // ─────────────── HELPERS ───────────────
   function formatDate(iso) {
     if (!iso) return '';
     const d = new Date(iso + 'T00:00:00');
@@ -582,18 +566,21 @@
       .replace(/'/g, '&#39;');
   }
 
-  // ─────────────── INIT ───────────────
   boot();
 
-  // Re-check auth when it changes
   if (window.BMX && window.BMX.auth) {
     window.BMX.auth.onChange((u) => {
       user = u;
+      sb = window.BMX.sb;
       if (user) {
         authPopup.style.display = 'none';
         wrap.style.display = '';
-        ensureLibrary().then(loadPlan);
+        if (!initialized) {
+          initialized = true;
+          ensureLibrary().then(loadPlan);
+        }
       } else {
+        initialized = false;
         showAuthPopup();
       }
     });
