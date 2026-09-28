@@ -7,6 +7,5 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 
 const sb = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-// Expose helpers other scripts can use
 window.BMX = window.BMX || {};
 window.BMX.sb = sb;
