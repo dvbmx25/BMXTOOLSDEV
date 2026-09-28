@@ -2393,7 +2393,7 @@ body {
 }
 
 .mem-card-back {
-  font-size: 0; /* hide any text, show only ::before */
+  font-size: 0;
 }
 
 .mem-card:hover:not(:disabled) .mem-card-back {
@@ -3078,12 +3078,9 @@ body {
 .auth-switch a:hover { color: #7CC3FF; }
 
 /* ═══════════════════════════════════════════════════════════════
-   TRAINING PLAN PAGE
-   Appended below. All selectors are prefixed with `tp-` or scoped
-   to the training page so nothing else on the site is affected.
+   TRAINING PLAN PAGE (all rules below are prefixed `tp-`)
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── Auth popup (shown when not logged in) ── */
 .tp-auth-popup {
   position: fixed;
   inset: 0;
@@ -3128,8 +3125,6 @@ body {
   flex-wrap: wrap;
 }
 
-/* Reuse the site's existing menu-btn look, but ensure the training page
-   has a fallback style in case the main styles.css rules are overridden. */
 .tp-auth-actions .menu-btn,
 .tp-wizard-actions .menu-btn {
   display: inline-block;
@@ -3165,14 +3160,12 @@ body {
   transform: translateY(-1px);
 }
 
-/* ── Wrap ── */
 .tp-wrap {
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
 }
 
-/* ── Wizard ── */
 .tp-wizard {
   background: #08203f;
   border: 1px solid #163760;
@@ -3268,7 +3261,6 @@ body {
   margin-top: 20px;
 }
 
-/* ── Sheet (dashboard) ── */
 .tp-sheet {
   display: flex;
   flex-direction: column;
@@ -3346,7 +3338,6 @@ body {
   padding: 0 4px;
 }
 
-/* ── Sessions ── */
 .tp-sessions-list { display: flex; flex-direction: column; gap: 18px; }
 .tp-week-group { display: flex; flex-direction: column; gap: 8px; }
 .tp-week-label {
@@ -3462,7 +3453,6 @@ body {
   text-align: center;
 }
 
-/* ── Library ── */
 .tp-library-col {
   background: #08203f;
   border: 1px solid #163760;
@@ -3591,7 +3581,6 @@ body {
   background: #0e2a4f;
 }
 
-/* ── Animating note ── */
 .tp-animating-note {
   font-size: .82rem;
   color: #9ec5ff;
