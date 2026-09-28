@@ -1,0 +1,11 @@
+{
+  "name": "bms-tools-dev",
+  "version": "1.0.0",
+  "description": "BMX tools for BMXERS",
+  "scripts": {
+    "build": "gulp build"
+  },
+  "devDependencies": {
+    "gulp": "^5.0.0"
+  }
+}
