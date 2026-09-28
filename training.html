@@ -118,6 +118,20 @@
     </div>
   </div>
 
+  <!-- Confirm popup (yes/no) -->
+  <div id="tpConfirmPopup" class="tp-popup-overlay" style="display:none;">
+    <div class="tp-popup">
+      <div class="tp-popup-header">
+        <h3 id="tpConfirmTitle">Are you sure?</h3>
+      </div>
+      <p class="tp-popup-sub" id="tpConfirmMessage">This can't be undone.</p>
+      <div class="tp-popup-actions">
+        <button id="tpConfirmCancel" class="tp-popup-cancel" type="button">Cancel</button>
+        <button id="tpConfirmOk" class="tp-popup-save" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-client.js"></script>
   <script src="auth.js"></script>
