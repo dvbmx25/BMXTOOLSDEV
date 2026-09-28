@@ -1,13 +1,12 @@
-<html>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Page Title · BMXTOOLS</title>
+  <title>Training Plan · BMXTOOLS</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-page="training">
 
   <header class="site-header">
     <a href="index.html" class="logo">BMX<span class="logo-accent">TOOLS</span></a>
@@ -18,35 +17,83 @@
       <a href="challenges.html">Challenges</a>
       <a href="resources.html">Resources</a>
       <a href="coaching.html">Online Coaching</a>
- </nav>
-  <div id="navAuth"></div>
-</header>
+    </nav>
+    <div id="navAuth"></div>
+  </header>
 
- <div class="pinboard-container">
-  <div class="board-header">
-    <h2>Training Plan</h2>
-    <p class="board-description">Build a program, set goals for each session, and journal how it went.</p>
-  </div>
-
-  <div class="training-sheet" id="trainingSheet">
-    <div class="training-sheet-header">
-      <button class="ts-nav-btn" id="tsPrev" title="Previous month">◀</button>
-      <div class="ts-month-label" id="tsMonthLabel">Month</div>
-      <button class="ts-nav-btn" id="tsNext" title="Next month">▶</button>
-      <button class="ts-nav-btn ts-today-btn" id="tsToday">Today</button>
-    </div>
-
-    <div class="ts-grid-scroll">
-      <div class="ts-weekdays">
-        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+  <!-- Auth popup (shown when not logged in) -->
+  <div id="trainingAuthPopup" class="tp-auth-popup" style="display:none;">
+    <div class="tp-auth-card">
+      <h2>Training Plan</h2>
+      <p>Build a training program leading up to your next race. Set goals, log how each session went, and track your progress.</p>
+      <p class="tp-auth-cta">Please log in or sign up to create your training plan.</p>
+      <div class="tp-auth-actions">
+        <a href="login.html" class="menu-btn primary">Log In</a>
+        <a href="signup.html" class="menu-btn">Sign Up</a>
       </div>
-      <div class="ts-grid" id="tsGrid"></div>
     </div>
   </div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-client.js"></script>
-<script src="auth.js"></script>
+
+  <!-- Main content (hidden until logged in) -->
+  <div id="trainingApp" class="tp-wrap" style="display:none;">
+
+    <!-- Setup wizard -->
+    <div id="tpWizard" class="tp-wizard" style="display:none;">
+      <h2>Set up your training plan</h2>
+      <p class="tp-wizard-sub">Answer a few questions and we'll build a plan leading up to your race.</p>
+
+      <label class="tp-field-label">What's your main goal?</label>
+      <input type="text" id="tpGoal" class="tp-input" placeholder="e.g. Get faster starts">
+
+      <label class="tp-field-label">Next race name</label>
+      <input type="text" id="tpRaceName" class="tp-input" placeholder="e.g. State Qualifier">
+
+      <label class="tp-field-label">Race date</label>
+      <input type="date" id="tpRaceDate" class="tp-input">
+
+      <label class="tp-field-label">Which days do you train?</label>
+      <div id="tpDaysPicker" class="tp-days-picker"></div>
+
+      <div class="tp-wizard-actions">
+        <button id="tpBuildBtn" class="menu-btn primary">Build My Plan</button>
+      </div>
+    </div>
+
+    <!-- Dashboard sheet -->
+    <div id="tpSheet" class="tp-sheet" style="display:none;">
+
+      <div class="tp-header-bar">
+        <div class="tp-header-info">
+          <div class="tp-goal-line"><span class="tp-goal-label">Goal:</span> <span id="tpGoalDisplay">—</span></div>
+          <div class="tp-race-line"><span class="tp-goal-label">Race:</span> <span id="tpRaceDisplay">—</span></div>
+          <div class="tp-countdown" id="tpCountdown">—</div>
+        </div>
+        <div class="tp-header-actions">
+          <button id="tpEditPlan" class="tp-small-btn">Edit Plan</button>
+        </div>
+      </div>
+
+      <div class="tp-main">
+        <div class="tp-sheet-col">
+          <h3 class="tp-section-heading">Training Sessions</h3>
+          <div id="tpSessionsList" class="tp-sessions-list"></div>
+        </div>
+
+        <aside class="tp-library-col">
+          <div class="tp-library-header">
+            <h3>Workout Library</h3>
+            <button id="tpAddCategoryBtn" class="tp-small-btn">+ Category</button>
+          </div>
+          <p class="tp-library-hint">Drag a workout onto a session to fill its focus.</p>
+          <div id="tpLibrary" class="tp-library"></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
+  <script src="auth.js"></script>
   <script src="training.js"></script>
 </body>
 </html>
