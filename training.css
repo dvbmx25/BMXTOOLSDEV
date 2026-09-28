@@ -187,3 +187,20 @@
 }
 .tp-lib-add-input::placeholder { color: #6c8db8; }
 .tp-lib-add-input:focus { outline: none; border-color: #1e7be0; border-style: solid; }
+/* Fallback for buttons inside the wizard since main styles.css may not cover them */
+.tp-wizard .menu-btn,
+.tp-wizard-actions .menu-btn {
+  padding: 0.9rem 1.8rem;
+  background: #1e7be0;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.tp-wizard .menu-btn:hover,
+.tp-wizard-actions .menu-btn:hover { background: #2c8ff0; }
+.tp-wizard .menu-btn.primary { background: #1e7be0; }
