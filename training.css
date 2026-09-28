@@ -127,4 +127,63 @@
   width: 100%; text-align: left;
 }
 .tp-past-toggle:hover { background: #0f2f52; }
-.tp-past-body { margin-top: 
+.tp-past-body { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 1.25rem; }
+.tp-empty { color: #6c8db8; font-size: 0.9rem; padding: 1rem 0; }
+
+.tp-library-col {
+  background: #0f2f52; border: 1px solid #1e3a5f;
+  border-radius: 12px; padding: 1rem 1.1rem;
+  position: sticky; top: 1.5rem;
+}
+.tp-library-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.5rem;
+}
+.tp-library-header h3 {
+  font-size: 0.85rem; color: #8ab4f8;
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.tp-library-hint { font-size: 0.75rem; color: #6c8db8; margin-bottom: 0.75rem; line-height: 1.4; }
+.tp-library { display: flex; flex-direction: column; gap: 0.75rem; }
+.tp-lib-group { display: flex; flex-direction: column; gap: 0.3rem; }
+.tp-lib-group.collapsed .tp-lib-body { display: none; }
+.tp-lib-header {
+  font-size: 0.8rem; font-weight: 700;
+  color: #e6f0ff; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 0.4rem 0;
+  cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
+  border-bottom: 1px solid #1e3a5f; margin-bottom: 0.3rem;
+}
+.tp-lib-toggle { font-size: 0.7rem; color: #8ab4f8; }
+.tp-lib-count {
+  margin-left: auto; font-size: 0.7rem; color: #6c8db8;
+  background: #0a2547; padding: 0.1rem 0.4rem; border-radius: 999px;
+}
+.tp-lib-body { display: flex; flex-direction: column; gap: 0.3rem; }
+.tp-lib-item {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: #16406e; border: 1px solid #2c5a8f;
+  border-radius: 6px; font-size: 0.85rem;
+  cursor: grab;
+}
+.tp-lib-item:hover { background: #1e5a9a; border-color: #3c7ac0; }
+.tp-lib-item:active { cursor: grabbing; }
+.tp-lib-item.dragging { opacity: 0.4; }
+.tp-lib-name { flex: 1; }
+.tp-lib-del {
+  background: transparent; border: none;
+  color: #8ab4f8; font-size: 1.1rem;
+  cursor: pointer; line-height: 1;
+  padding: 0 0.2rem; border-radius: 4px;
+}
+.tp-lib-del:hover { color: #ef4444; background: rgba(239,68,68,0.12); }
+.tp-lib-add-row { margin-top: 0.15rem; }
+.tp-lib-add-input {
+  width: 100%; padding: 0.4rem 0.6rem;
+  background: transparent;
+  border: 1px dashed #2c5a8f; border-radius: 6px;
+  color: #e6f0ff; font-size: 0.8rem; font-family: inherit;
+}
+.tp-lib-add-input::placeholder { color: #6c8db8; }
+.tp-lib-add-input:focus { outline: none; border-color: #1e7be0; border-style: solid; }
