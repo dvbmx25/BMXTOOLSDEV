@@ -1,4 +1,4 @@
-// training.js — training plan builder with Supabase, drag-drop workout library, and journal.
+// training.js — training plan builder with Supabase, collapsible sessions, drag-drop library.
 
 (function () {
   const wrap = document.getElementById('trainingApp');
@@ -36,8 +36,14 @@
   const categoryConfirm     = document.getElementById('tpCategoryConfirm');
   const categoryCancel      = document.getElementById('tpCategoryCancel');
 
-  // Default training days: Mon, Wed, Fri
-  const DEFAULT_TRAINING_DAYS = [1, 3, 5];
+  // Confirm popup
+  const confirmPopup   = document.getElementById('tpConfirmPopup');
+  const confirmTitle   = document.getElementById('tpConfirmTitle');
+  const confirmMessage = document.getElementById('tpConfirmMessage');
+  const confirmOk      = document.getElementById('tpConfirmOk');
+  const confirmCancel  = document.getElementById('tpConfirmCancel');
+
+  const DEFAULT_TRAINING_DAYS = [1, 3, 5]; // Mon, Wed, Fri
 
   const SEED_LIBRARY = {
     'Gate Work': [
@@ -73,6 +79,9 @@
   let initialized = false;
   let editingPlan = false;
 
+  // Track which session rows are collapsed (persists across re-renders)
+  const collapsedSessions = new Set();
+
   async function boot() {
     if (!window.BMX || !window.BMX.sb) {
       setTimeout(boot, 100);
@@ -100,6 +109,33 @@
     authPopup.style.display = 'flex';
     wrap.style.display = 'none';
   }
+
+  /* ─────────────── CONFIRM POPUP ─────────────── */
+  let confirmResolve = null;
+
+  function showConfirm(title, message, okLabel) {
+    return new Promise(resolve => {
+      confirmResolve = resolve;
+      confirmTitle.textContent = title;
+      confirmMessage.textContent = message;
+      confirmOk.textContent = okLabel || 'Confirm';
+      confirmPopup.style.display = 'flex';
+    });
+  }
+
+  function closeConfirm(result) {
+    confirmPopup.style.display = 'none';
+    if (confirmResolve) {
+      confirmResolve(result);
+      confirmResolve = null;
+    }
+  }
+
+  confirmOk.addEventListener('click', () => closeConfirm(true));
+  confirmCancel.addEventListener('click', () => closeConfirm(false));
+  confirmPopup.addEventListener('click', (e) => {
+    if (e.target === confirmPopup) closeConfirm(false);
+  });
 
   /* ─────────────── WORKOUT LIBRARY ─────────────── */
   async function ensureLibrary() {
@@ -148,7 +184,6 @@
 
     Object.keys(grouped).forEach(category => {
       const group = document.createElement('div');
-      // All categories start COLLAPSED
       group.className = 'tp-lib-group collapsed';
 
       const header = document.createElement('div');
@@ -178,7 +213,8 @@
         item.addEventListener('dragend', () => item.classList.remove('dragging'));
         item.querySelector('.tp-lib-del').addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!window.confirm(`Delete "${w.name}" from your library?`)) return;
+          const ok = await showConfirm('Delete workout', `Delete "${w.name}" from your library?`, 'Delete');
+          if (!ok) return;
           await sb.from('workout_library').delete().eq('id', w.id);
           library = library.filter(x => x.id !== w.id);
           renderLibrary();
@@ -287,8 +323,6 @@
     sessions = data || [];
   }
 
-  // showWizard(true) → editing an existing plan (Cancel available, title "Edit")
-  // showWizard(false) → first-time setup
   function showWizard(isEdit) {
     editingPlan = isEdit;
     wizard.style.display = '';
@@ -318,10 +352,7 @@
   }
 
   wizardCancel.addEventListener('click', () => {
-    // Return to the dashboard without saving changes
-    if (plan) {
-      renderDashboard();
-    }
+    if (plan) renderDashboard();
   });
 
   buildBtn.addEventListener('click', async () => {
@@ -340,7 +371,11 @@
       }).eq('id', plan.id);
       if (error) { console.error('plan update:', error); return; }
 
-      const regen = window.confirm('Do you want to rebuild your training sessions?\n\nOK = rebuild future sessions until race day (past journals are kept).\nCancel = only add missing sessions.');
+      const regen = await showConfirm(
+        'Rebuild sessions?',
+        'OK = rebuild future sessions until race day (past journals are kept). Cancel = only add missing sessions.',
+        'Rebuild'
+      );
 
       if (regen) {
         await rebuildSessions(trainingDays, raceDate);
@@ -371,12 +406,9 @@
     while (cursor <= end) {
       if (trainingDays.includes(cursor.getDay())) {
         rows.push({
-          plan_id: plan.id,
-          user_id: user.id,
+          plan_id: plan.id, user_id: user.id,
           session_date: cursor.toISOString().slice(0, 10),
-          focus: '',
-          journal: '',
-          completed: false
+          focus: '', journal: '', completed: false
         });
       }
       cursor.setDate(cursor.getDate() + 1);
@@ -389,13 +421,12 @@
 
   async function rebuildSessions(trainingDays, raceDate) {
     const todayStr = new Date().toISOString().slice(0, 10);
-    const { error: delErr } = await sb
+    await sb
       .from('training_sessions')
       .delete()
       .eq('plan_id', plan.id)
       .gte('session_date', todayStr)
       .eq('completed', false);
-    if (delErr) { console.error('session cleanup:', delErr); return; }
 
     const rows = [];
     const today = new Date(); today.setHours(0,0,0,0);
@@ -404,12 +435,9 @@
     while (cursor <= end) {
       if (trainingDays.includes(cursor.getDay())) {
         rows.push({
-          plan_id: plan.id,
-          user_id: user.id,
+          plan_id: plan.id, user_id: user.id,
           session_date: cursor.toISOString().slice(0, 10),
-          focus: '',
-          journal: '',
-          completed: false
+          focus: '', journal: '', completed: false
         });
       }
       cursor.setDate(cursor.getDate() + 1);
@@ -431,8 +459,7 @@
       if (trainingDays.includes(cursor.getDay()) && !existing.has(iso)) {
         rows.push({
           plan_id: plan.id, user_id: user.id,
-          session_date: iso, focus: '',
-          journal: '', completed: false
+          session_date: iso, focus: '', journal: '', completed: false
         });
       }
       cursor.setDate(cursor.getDate() + 1);
@@ -443,9 +470,7 @@
     }
   }
 
-  editPlanBtn.addEventListener('click', () => {
-    showWizard(true);
-  });
+  editPlanBtn.addEventListener('click', () => showWizard(true));
 
   /* ─────────────── NUMBER POPUP ─────────────── */
   let numberPopupResolve = null;
@@ -477,12 +502,10 @@
   });
 
   numberCancel.addEventListener('click', () => closeNumberPopup(null));
-
   numberInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); numberConfirm.click(); }
     if (e.key === 'Escape') { e.preventDefault(); closeNumberPopup(null); }
   });
-
   numberPopup.addEventListener('click', (e) => {
     if (e.target === numberPopup) closeNumberPopup(null);
   });
@@ -577,7 +600,6 @@
     return wrap;
   }
 
-  // Parse "Gate starts\n30ft sprints\nManuals" into an array of workout strings
   function parseFocus(focus) {
     if (!focus) return [];
     return focus.split('\n').map(x => x.trim()).filter(Boolean);
@@ -590,11 +612,13 @@
     const row = document.createElement('div');
     row.className = 'tp-session-row' + (s.completed ? ' completed' : '');
     row.dataset.id = s.id;
+    if (collapsedSessions.has(s.id)) row.classList.add('collapsed');
 
     const d = new Date(s.session_date + 'T00:00:00');
-    const dateLabel = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const dateLabel = d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 
     const workouts = parseFocus(s.focus);
+    const countBadge = workouts.length ? `<span class="tp-session-badge">${workouts.length}</span>` : '';
 
     const workoutsHtml = workouts.length
       ? workouts.map((w, i) => `
@@ -607,16 +631,34 @@
 
     row.innerHTML = `
       <div class="tp-session-head">
+        <button class="tp-session-toggle" type="button" aria-label="Toggle">
+          <span class="tp-session-chevron">▼</span>
+        </button>
         <label class="tp-session-check" title="Mark complete">
           <input type="checkbox" ${s.completed ? 'checked' : ''}>
         </label>
         <div class="tp-session-date">${dateLabel}</div>
+        ${countBadge}
       </div>
-      <ul class="tp-workout-list">${workoutsHtml}</ul>
-      <div class="tp-session-body">
-        <textarea class="tp-session-journal" placeholder="How did it go?">${escapeHtml(s.journal || '')}</textarea>
+      <div class="tp-session-content">
+        <ul class="tp-workout-list">${workoutsHtml}</ul>
+        <div class="tp-session-body">
+          <textarea class="tp-session-journal" placeholder="How did it go?">${escapeHtml(s.journal || '')}</textarea>
+        </div>
       </div>
     `;
+
+    // Toggle collapse
+    row.querySelector('.tp-session-toggle').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (collapsedSessions.has(s.id)) {
+        collapsedSessions.delete(s.id);
+        row.classList.remove('collapsed');
+      } else {
+        collapsedSessions.add(s.id);
+        row.classList.add('collapsed');
+      }
+    });
 
     // Complete toggle
     row.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
@@ -626,7 +668,7 @@
       await sb.from('training_sessions').update({ completed, updated_at: new Date().toISOString() }).eq('id', s.id);
     });
 
-    // Remove a single workout from the list
+    // Remove workout
     row.querySelectorAll('.tp-workout-remove').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -635,11 +677,11 @@
         list.splice(idx, 1);
         s.focus = joinFocus(list);
         await sb.from('training_sessions').update({ focus: s.focus, updated_at: new Date().toISOString() }).eq('id', s.id);
-        renderSessionRowReplace(row, s, isPast);
+        refreshSessionRow(row, s, isPast);
       });
     });
 
-    // Journal auto-save
+    // Journal autosave
     const journalEl = row.querySelector('.tp-session-journal');
     journalEl.addEventListener('blur', async () => {
       const journal = journalEl.value;
@@ -649,7 +691,7 @@
       flashRow(row);
     });
 
-    // Drop target — APPENDS a workout
+    // Drop — append a workout
     row.addEventListener('dragover', (e) => {
       e.preventDefault();
       row.classList.add('drop-target');
@@ -674,18 +716,19 @@
       list.push(workoutText);
       s.focus = joinFocus(list);
       await sb.from('training_sessions').update({ focus: s.focus, updated_at: new Date().toISOString() }).eq('id', s.id);
-      renderSessionRowReplace(row, s, isPast);
+
+      // Auto-expand the session so the user sees the newly added workout
+      collapsedSessions.delete(s.id);
+      refreshSessionRow(row, s, isPast);
       flashRow(row);
     });
 
     return row;
   }
 
-  // Re-render a single session row in place (after add/remove of workouts)
-  function renderSessionRowReplace(oldRow, s, isPast) {
+  function refreshSessionRow(oldRow, s, isPast) {
     const newRow = renderSessionRow(s, isPast);
     oldRow.replaceWith(newRow);
-    flashRow(newRow);
   }
 
   function flashRow(row) {
