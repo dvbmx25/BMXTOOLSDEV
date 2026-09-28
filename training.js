@@ -10,7 +10,6 @@
   const goalInput     = document.getElementById('tpGoal');
   const raceNameInput = document.getElementById('tpRaceName');
   const raceDateInput = document.getElementById('tpRaceDate');
-  const daysPicker    = document.getElementById('tpDaysPicker');
   const buildBtn      = document.getElementById('tpBuildBtn');
   const goalDisplay   = document.getElementById('tpGoalDisplay');
   const raceDisplay   = document.getElementById('tpRaceDisplay');
@@ -20,7 +19,15 @@
   const addCategoryBtn= document.getElementById('tpAddCategoryBtn');
   const editPlanBtn   = document.getElementById('tpEditPlan');
 
-  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const numberPopup   = document.getElementById('tpNumberPopup');
+  const numberPopupTitle = document.getElementById('tpNumberPopupTitle');
+  const numberPopupSub   = document.getElementById('tpNumberPopupSub');
+  const numberInput   = document.getElementById('tpNumberInput');
+  const numberConfirm = document.getElementById('tpNumberConfirm');
+  const numberCancel  = document.getElementById('tpNumberCancel');
+
+  // Default training days: Mon, Wed, Fri (1 = Mon, 3 = Wed, 5 = Fri in JS getDay())
+  const DEFAULT_TRAINING_DAYS = [1, 3, 5];
 
   const SEED_LIBRARY = {
     'Gate Work': [
@@ -41,6 +48,7 @@
     'Custom': []
   };
 
+  // Workouts that prompt for a number when dragged
   const NUMBER_PROMPT_WORKOUTS = new Set([
     'Pump laps',
     'X half laps, first half',
@@ -62,7 +70,6 @@
     }
     if (window.BMX.authReady) await window.BMX.authReady;
 
-    // Assign sb locally NOW so any callback that fires can use it
     sb = window.BMX.sb;
     user = window.BMX.auth?.getUser?.() || null;
 
@@ -84,6 +91,7 @@
     wrap.style.display = 'none';
   }
 
+  /* ─────────────── WORKOUT LIBRARY ─────────────── */
   async function ensureLibrary() {
     if (!sb || !user) return;
     const { data, error } = await sb
@@ -207,6 +215,7 @@
     renderLibrary();
   });
 
+  /* ─────────────── PLAN ─────────────── */
   async function loadPlan() {
     if (!sb || !user) return;
     const { data: plans, error } = await sb
@@ -243,14 +252,6 @@
     wizard.style.display = '';
     sheet.style.display = 'none';
 
-    daysPicker.innerHTML = '';
-    DAYS.forEach((d, i) => {
-      const label = document.createElement('label');
-      label.className = 'tp-day-chip';
-      label.innerHTML = `<input type="checkbox" value="${i}"> ${d}`;
-      daysPicker.appendChild(label);
-    });
-
     if (!raceDateInput.value) {
       const d = new Date();
       d.setDate(d.getDate() + 42);
@@ -261,10 +262,6 @@
       goalInput.value = plan.goal || '';
       raceNameInput.value = plan.race_name || '';
       raceDateInput.value = plan.race_date || '';
-      (plan.training_days || []).forEach(d => {
-        const cb = daysPicker.querySelector(`input[value="${d}"]`);
-        if (cb) cb.checked = true;
-      });
     }
   }
 
@@ -272,11 +269,10 @@
     const goal = goalInput.value.trim();
     const raceName = raceNameInput.value.trim();
     const raceDate = raceDateInput.value;
-    const trainingDays = Array.from(daysPicker.querySelectorAll('input:checked')).map(cb => Number(cb.value));
+    const trainingDays = DEFAULT_TRAINING_DAYS;
 
     if (!goal) { alert('Please enter a goal.'); return; }
     if (!raceDate) { alert('Please pick a race date.'); return; }
-    if (trainingDays.length === 0) { alert('Please pick at least one training day.'); return; }
 
     if (plan) {
       const { error } = await sb.from('training_plans').update({
@@ -391,6 +387,47 @@
     showWizard();
   });
 
+  /* ─────────────── NUMBER POPUP ─────────────── */
+  let numberPopupResolve = null;
+
+  function openNumberPopup(workoutName) {
+    return new Promise(resolve => {
+      numberPopupResolve = resolve;
+      numberPopupTitle.textContent = workoutName;
+      numberPopupSub.textContent = 'How many reps?';
+      numberInput.value = '5';
+      numberPopup.style.display = 'flex';
+      setTimeout(() => { numberInput.focus(); numberInput.select(); }, 30);
+    });
+  }
+
+  function closeNumberPopup(result) {
+    numberPopup.style.display = 'none';
+    if (numberPopupResolve) {
+      numberPopupResolve(result);
+      numberPopupResolve = null;
+    }
+  }
+
+  numberConfirm.addEventListener('click', () => {
+    const val = numberInput.value.trim();
+    const num = val ? Number(val) : null;
+    if (!num || isNaN(num) || num < 1) { numberInput.focus(); return; }
+    closeNumberPopup(num);
+  });
+
+  numberCancel.addEventListener('click', () => closeNumberPopup(null));
+
+  numberInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); numberConfirm.click(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeNumberPopup(null); }
+  });
+
+  numberPopup.addEventListener('click', (e) => {
+    if (e.target === numberPopup) closeNumberPopup(null);
+  });
+
+  /* ─────────────── DASHBOARD ─────────────── */
   function renderDashboard() {
     wizard.style.display = 'none';
     sheet.style.display = '';
@@ -490,7 +527,7 @@
 
     row.innerHTML = `
       <div class="tp-session-head">
-        <label class="tp-session-check">
+        <label class="tp-session-check" title="Mark complete">
           <input type="checkbox" ${s.completed ? 'checked' : ''}>
         </label>
         <div class="tp-session-date">${dateLabel}</div>
@@ -501,6 +538,7 @@
       </div>
     `;
 
+    // Complete toggle
     row.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
       const completed = e.target.checked;
       s.completed = completed;
@@ -508,6 +546,7 @@
       await sb.from('training_sessions').update({ completed, updated_at: new Date().toISOString() }).eq('id', s.id);
     });
 
+    // Journal auto-save on blur
     const journalEl = row.querySelector('.tp-session-journal');
     journalEl.addEventListener('blur', async () => {
       const journal = journalEl.value;
@@ -517,6 +556,7 @@
       flashRow(row);
     });
 
+    // Drop target for workouts
     row.addEventListener('dragover', (e) => {
       e.preventDefault();
       row.classList.add('drop-target');
@@ -532,7 +572,7 @@
 
       let newFocus = payload.name;
       if (NUMBER_PROMPT_WORKOUTS.has(payload.name)) {
-        const num = window.prompt(`How many for "${payload.name}"?`, '5');
+        const num = await openNumberPopup(payload.name);
         if (num === null) return;
         newFocus = payload.name.replace(/^X\s+/i, `${num} `);
       }
