@@ -5,7 +5,7 @@
 const supabaseUrl = '__SUPABASE_URL__';
 const supabaseKey = '__SUPABASE_ANON_KEY__';
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 // Expose helpers other scripts can use
 window.BMX = window.BMX || {};
