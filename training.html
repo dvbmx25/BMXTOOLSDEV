@@ -36,7 +36,7 @@
   <div id="trainingApp" class="tp-wrap" style="display:none;">
 
     <div id="tpWizard" class="tp-wizard" style="display:none;">
-      <h2>Set up your training plan</h2>
+      <h2 id="tpWizardTitle">Set up your training plan</h2>
       <p class="tp-wizard-sub">Answer a few questions and we'll build a plan leading up to your race.</p>
 
       <label class="tp-field-label">What's your main goal for this next training block?</label>
@@ -49,7 +49,8 @@
       <input type="date" id="tpRaceDate" class="tp-input">
 
       <div class="tp-wizard-actions">
-        <button id="tpBuildBtn" class="menu-btn primary">Build My Plan</button>
+        <button id="tpWizardCancel" class="menu-btn" type="button" style="display:none;">Cancel</button>
+        <button id="tpBuildBtn" class="menu-btn primary" type="button">Build My Plan</button>
       </div>
     </div>
 
@@ -77,14 +78,14 @@
             <h3>Workout Library</h3>
             <button id="tpAddCategoryBtn" class="tp-small-btn">+ Category</button>
           </div>
-          <p class="tp-library-hint">Drag a workout onto a session to fill its focus.</p>
+          <p class="tp-library-hint">Drag a workout onto a session to add it.</p>
           <div id="tpLibrary" class="tp-library"></div>
         </aside>
       </div>
     </div>
   </div>
 
-  <!-- In-page popup for entering a number of reps -->
+  <!-- Number popup -->
   <div id="tpNumberPopup" class="tp-popup-overlay" style="display:none;">
     <div class="tp-popup">
       <div class="tp-popup-header">
@@ -95,6 +96,24 @@
       <div class="tp-popup-actions">
         <button id="tpNumberCancel" class="tp-popup-cancel" type="button">Cancel</button>
         <button id="tpNumberConfirm" class="tp-popup-save" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Category popup -->
+  <div id="tpCategoryPopup" class="tp-popup-overlay" style="display:none;">
+    <div class="tp-popup">
+      <div class="tp-popup-header">
+        <h3>New Category</h3>
+      </div>
+      <p class="tp-popup-sub">Give your new category a name and add the first workout to it.</p>
+      <label class="tp-field-label">Category name</label>
+      <input type="text" id="tpCategoryName" class="tp-input" placeholder="e.g. Cornering" autocomplete="off">
+      <label class="tp-field-label">First workout</label>
+      <input type="text" id="tpCategoryFirstWorkout" class="tp-input" placeholder="e.g. 10 corner laps" autocomplete="off">
+      <div class="tp-popup-actions">
+        <button id="tpCategoryCancel" class="tp-popup-cancel" type="button">Cancel</button>
+        <button id="tpCategoryConfirm" class="tp-popup-save" type="button">Create</button>
       </div>
     </div>
   </div>
