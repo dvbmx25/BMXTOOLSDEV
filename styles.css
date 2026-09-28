@@ -3588,3 +3588,93 @@ body {
   text-align: center;
   padding: 20px 8px;
 }
+/* ─── Training number popup ─── */
+.tp-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 8, 24, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: tp-popup-fade .15s ease;
+}
+@keyframes tp-popup-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.tp-popup {
+  background: #0e2a4f;
+  border: 1px solid #2c5488;
+  border-radius: 16px;
+  padding: 22px 24px;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 30px 60px -10px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.06);
+  animation: tp-popup-in .18s cubic-bezier(.2,.9,.4,1.2);
+}
+@keyframes tp-popup-in {
+  from { opacity: 0; transform: scale(.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.tp-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tp-popup-header h3 {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: .3px;
+  margin: 0;
+}
+
+.tp-popup-sub {
+  font-size: .82rem;
+  color: #b7b1e0;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.tp-popup-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.tp-popup-save,
+.tp-popup-cancel {
+  border-radius: 10px;
+  padding: 9px 18px;
+  font-family: inherit;
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .3px;
+  cursor: pointer;
+  transition: .15s;
+  border: 1px solid transparent;
+}
+
+.tp-popup-save {
+  background: linear-gradient(135deg, #1E7BE0, #3DA5FF);
+  color: #ffffff;
+  box-shadow: 0 6px 14px -6px rgba(61,165,255,.7);
+}
+.tp-popup-save:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+.tp-popup-cancel {
+  background: transparent;
+  border-color: #2c5488;
+  color: #9ec5ff;
+}
+.tp-popup-cancel:hover { background: #163b66; color: #ffffff; border-color: #4a7cbf; }
