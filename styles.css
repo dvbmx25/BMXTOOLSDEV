@@ -3678,3 +3678,57 @@ body {
   color: #9ec5ff;
 }
 .tp-popup-cancel:hover { background: #163b66; color: #ffffff; border-color: #4a7cbf; }
+
+/* ─── Workout list inside each session ─── */
+.tp-workout-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tp-workout-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #0e2a4f;
+  border: 1px solid #1a3f6e;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: .85rem;
+  color: #ffffff;
+  transition: .15s;
+}
+.tp-workout-item:hover { border-color: #2c5488; background: #163b66; }
+
+.tp-workout-name { flex: 1; min-width: 0; word-break: break-word; }
+
+.tp-workout-remove {
+  background: transparent;
+  border: none;
+  color: #9f98c9;
+  font-size: 1.05rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 6px;
+  transition: .15s;
+  flex-shrink: 0;
+}
+.tp-workout-remove:hover { color: #ff9eb5; background: #4f2b3a; }
+
+.tp-workout-empty {
+  color: #7b8fb8;
+  font-size: .82rem;
+  font-style: italic;
+  padding: 8px 12px;
+  border: 1px dashed #2c5488;
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* Session focus is no longer shown as text — list replaces it */
+.tp-session-focus { display: none; }
