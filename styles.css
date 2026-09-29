@@ -176,17 +176,19 @@ body {
   display: block;
   width: 100%;
   height: auto;
-  max-width: 750px;
-  max-height: 70vh;
-  object-fit: contain;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .map-stage {
   position: relative;
+  width: 100%;
+  height: auto;
   transform-origin: 0 0;
   will-change: transform;
   backface-visibility: hidden;
@@ -1395,6 +1397,7 @@ body {
   border: 1px dashed #12315c;
   min-height: 160px;
 }
+
 /* ── navAuth (login / signup / user menu) ── */
 #navAuth {
   display: flex;
@@ -1406,7 +1409,8 @@ body {
 #navAuth button,
 #navAuth .login-btn,
 #navAuth .auth-btn,
-#navAuth .login-link {
+#navAuth .login-link,
+#navAuth .nav-login-btn {
   color: #9ec5ff;
   text-decoration: none;
   font-size: .82rem;
@@ -1427,26 +1431,7 @@ body {
 #navAuth button:hover,
 #navAuth .login-btn:hover,
 #navAuth .auth-btn:hover,
-#navAuth .login-link:hover {
-  background: #163b66;
-  color: #ffffff;
-  box-shadow: inset 0 0 0 1px #2c5488;
-}
-/* ── navAuth login link (matches .nav-login-btn from auth.js) ── */
-#navAuth .nav-login-btn {
-  color: #9ec5ff;
-  text-decoration: none;
-  font-size: .82rem;
-  font-weight: 600;
-  letter-spacing: .4px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  background: transparent;
-  transition: background .15s, color .15s, box-shadow .15s;
-  white-space: nowrap;
-  display: inline-block;
-}
-
+#navAuth .login-link:hover,
 #navAuth .nav-login-btn:hover {
   background: #163b66;
   color: #ffffff;
