@@ -3996,3 +3996,126 @@ body {
   color: #7CC3FF;
   border-color: #2c5488;
 }
+/* ─── Pin popup — location / phone / website / contact lines ─── */
+.pin-popup-static {
+  font-size: .82rem;
+  color: #e6f0ff;
+  background: #08203f;
+  border: 1px solid #1a3f6e;
+  border-radius: 8px;
+  padding: 8px 10px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.pin-popup-link {
+  display: block;
+  font-size: .82rem;
+  color: #3DA5FF;
+  background: #08203f;
+  border: 1px solid #1a3f6e;
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-decoration: none;
+  transition: .15s;
+  word-break: break-word;
+}
+.pin-popup-link:hover {
+  background: #0e2a4f;
+  color: #7CC3FF;
+  border-color: #2c5488;
+}
+
+/* ─── Nested seed map groups (USA BMX Tracks → states) ─── */
+.map-list-group {
+  list-style: none;
+}
+.map-list-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #0e2a4f;
+  border: 1px solid #2c5488;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s;
+  margin-bottom: 4px;
+}
+.map-list-group-header:hover { background: #163b66; }
+
+.map-list-group-chevron {
+  font-size: .65rem;
+  color: #9ec5ff;
+  flex-shrink: 0;
+}
+.map-list-group-name {
+  flex: 1;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+.map-list-group-count {
+  font-size: .62rem;
+  color: #9f98c9;
+  background: #08203f;
+  border: 1px solid #1a3f6e;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-weight: 700;
+}
+
+.map-list-sub {
+  margin-left: 12px;
+  padding-left: 6px;
+  border-left: 2px solid #163760;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.map-list-sub .map-list-item {
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+.map-list-sub .map-list-item-name {
+  font-size: .78rem;
+}
+
+/* ─── Zoom controls ─── */
+.zoom-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 100;
+}
+.zoom-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #0e2a4f;
+  border: 1px solid #2c5488;
+  color: #ffffff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: .15s;
+  padding: 0;
+  font-family: inherit;
+  box-shadow: 0 4px 10px rgba(0,0,0,.4);
+}
+.zoom-btn:hover {
+  background: #163b66;
+  border-color: #4a7cbf;
+  color: #3DA5FF;
+}
+.zoom-btn:active {
+  transform: scale(.95);
+}
