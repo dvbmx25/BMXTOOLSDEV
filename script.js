@@ -129,6 +129,134 @@
     }
     applyZoom();
   }
+  /* ─────────────── ZOOM + PAN (stage-based) ─────────────── */
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 6;
+const ZOOM_STEP = 1.25;       // button step (multiplicative)
+const WHEEL_STEP = 0.0015;    // wheel sensitivity (multiplied by deltaY)
+const zoomState = { scale: 1, tx: 0, ty: 0 };
+
+function getStage() {
+  return document.getElementById('mapStage') || staticImage.parentElement;
+}
+
+function applyZoom() {
+  const s = getStage();
+  if (!s) return;
+  s.style.transformOrigin = '0 0';
+  s.style.transform = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
+  clampPan();
+  // Apply again in case clamping changed tx/ty
+  s.style.transform = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
+}
+
+function clampPan() {
+  const s = getStage();
+  if (!s || !wrapper) return;
+  const w = wrapper.clientWidth;
+  const h = wrapper.clientHeight;
+  const scaledW = w * zoomState.scale;
+  const scaledH = h * zoomState.scale;
+
+  // If the map is smaller than the wrapper, center-ish: lock to 0.
+  const minTx = Math.min(0, w - scaledW);
+  const maxTx = 0;
+  const minTy = Math.min(0, h - scaledH);
+  const maxTy = 0;
+
+  zoomState.tx = Math.max(minTx, Math.min(maxTx, zoomState.tx));
+  zoomState.ty = Math.max(minTy, Math.min(maxTy, zoomState.ty));
+}
+
+function resetZoom() {
+  zoomState.scale = 1;
+  zoomState.tx = 0;
+  zoomState.ty = 0;
+  applyZoom();
+}
+
+/** Zoom to a specific client point (e.g. cursor) or the wrapper center. */
+function zoomAt(clientX, clientY, factor) {
+  if (!wrapper) return;
+  const rect = wrapper.getBoundingClientRect();
+  // Point under the anchor, in un-transformed stage coordinates
+  const px = (clientX - rect.left - zoomState.tx) / zoomState.scale;
+  const py = (clientY - rect.top  - zoomState.ty) / zoomState.scale;
+
+  const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomState.scale * factor));
+  if (newScale === zoomState.scale) return;
+
+  // Keep (px, py) under the same client point after scaling
+  zoomState.tx = clientX - rect.left - px * newScale;
+  zoomState.ty = clientY - rect.top  - py * newScale;
+  zoomState.scale = newScale;
+
+  if (zoomState.scale === 1) { zoomState.tx = 0; zoomState.ty = 0; }
+  applyZoom();
+}
+
+function zoomIn() {
+  if (!wrapper) return;
+  const rect = wrapper.getBoundingClientRect();
+  zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, ZOOM_STEP);
+}
+
+function zoomOut() {
+  if (!wrapper) return;
+  const rect = wrapper.getBoundingClientRect();
+  zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / ZOOM_STEP);
+}
+
+/* ─────────────── WHEEL ZOOM ─────────────── */
+wrapper.addEventListener('wheel', (e) => {
+  // Only zoom with wheel when the user isn't over the popup / controls
+  if (e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
+  e.preventDefault();
+  const factor = Math.exp(-e.deltaY * WHEEL_STEP);
+  zoomAt(e.clientX, e.clientY, factor);
+}, { passive: false });
+
+/* ─────────────── DRAG-TO-PAN ─────────────── */
+let isPanning = false;
+let panStart = null;   // { x, y, tx, ty }
+let panMoved = false;  // suppress click if the user actually dragged
+
+wrapper.addEventListener('pointerdown', (e) => {
+  // Ignore clicks on pins, popups, or zoom controls
+  if (e.target.closest('.pin') || e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
+  // Left button / primary touch only
+  if (e.button !== 0) return;
+  // Only allow panning when zoomed in
+  if (zoomState.scale <= 1) return;
+
+  isPanning = true;
+  panMoved = false;
+  panStart = { x: e.clientX, y: e.clientY, tx: zoomState.tx, ty: zoomState.ty };
+  wrapper.setPointerCapture(e.pointerId);
+  wrapper.style.cursor = 'grabbing';
+});
+
+wrapper.addEventListener('pointermove', (e) => {
+  if (!isPanning || !panStart) return;
+  const dx = e.clientX - panStart.x;
+  const dy = e.clientY - panStart.y;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panMoved = true;
+  zoomState.tx = panStart.tx + dx;
+  zoomState.ty = panStart.ty + dy;
+  applyZoom();
+});
+
+function endPan(e) {
+  if (!isPanning) return;
+  isPanning = false;
+  panStart = null;
+  wrapper.style.cursor = '';
+  try { wrapper.releasePointerCapture(e.pointerId); } catch {}
+}
+
+wrapper.addEventListener('pointerup', endPan);
+wrapper.addEventListener('pointercancel', endPan);
+wrapper.addEventListener('pointerleave', endPan);
 
   /* ─────────────── STATE ─────────────── */
   let pins = [];
@@ -476,6 +604,7 @@
   }
 
   wrapper.addEventListener('click', (e) => {
+    if (panMoved) { panMoved = false; return; }  
     if (e.target.closest('.pin') || e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
     if (isReadOnly()) return;
     if (page === 'maps' && !currentMap) return;
