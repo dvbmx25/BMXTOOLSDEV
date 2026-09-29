@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Map Creator · BMXTOOLS</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body data-page="creator">
 
@@ -34,14 +35,8 @@
   <div class="board-layout">
     <div class="map-column">
       <div class="image-pin-wrapper" id="imageWrapper" data-map-id="creator">
-        <div class="map-stage" id="mapStage">
-      <img
-  class="static-image"
-  id="staticImage"
-  draggable="false"
-  alt="Map of the United States"
-  src="https://upload.wikimedia.org/wikipedia/commons/9/92/Map_of_USA_with_state_names_2.svg"
-/>
+        <div id="mapStage" class="map-stage">
+          <div id="leafletMap"></div>
         </div>
       </div>
     </div>
@@ -58,7 +53,9 @@
     <span><kbd>⌘/Ctrl</kbd> + click pin to remove</span>
   </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="supabase-client.js"></script>
 <script src="auth.js"></script>
 <script src="maps-data.js"></script>
