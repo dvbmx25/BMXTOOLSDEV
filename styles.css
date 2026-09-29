@@ -1394,3 +1394,40 @@ body {
   border: 1px dashed #12315c;
   min-height: 160px;
 }
+/* ── navAuth (login / signup / user menu) ── */
+#navAuth {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#navAuth a,
+#navAuth button,
+#navAuth .login-btn,
+#navAuth .auth-btn,
+#navAuth .login-link {
+  color: #9ec5ff;
+  text-decoration: none;
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .4px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-block;
+  transition: background .15s, color .15s, box-shadow .15s;
+}
+
+#navAuth a:hover,
+#navAuth button:hover,
+#navAuth .login-btn:hover,
+#navAuth .auth-btn:hover,
+#navAuth .login-link:hover {
+  background: #163b66;
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px #2c5488;
+}
