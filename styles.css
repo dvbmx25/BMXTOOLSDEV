@@ -1500,3 +1500,64 @@ body {
   background: transparent !important;
   border: none !important;
 }
+/* ── Pin lookup row ── */
+.pin-title-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.pin-title-row .f-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.pin-lookup-btn {
+  flex-shrink: 0;
+  background: #2c5488;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background .12s, opacity .12s;
+  font-family: inherit;
+  min-width: 38px;
+}
+
+.pin-lookup-btn:hover {
+  background: #3a6dab;
+}
+
+.pin-lookup-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.pin-lookup-status {
+  margin-top: 6px;
+  font-size: .72rem;
+  line-height: 1.35;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.pin-lookup-status.is-loading {
+  background: #12315c;
+  color: #9ec5ff;
+  border-color: #1a3f6e;
+}
+
+.pin-lookup-status.is-ok {
+  background: #0d3320;
+  color: #7fe0b0;
+  border-color: #1c5c3a;
+}
+
+.pin-lookup-status.is-error {
+  background: #3b1a2a;
+  color: #ff9eb5;
+  border-color: #6f3a4e;
+}
