@@ -1,6 +1,6 @@
 (function () {
   const wrapper = document.getElementById('imageWrapper');
-  const staticImage = document.getElementById('staticImage'); // may be null — used only for legacy fallback checks
+  const staticImage = document.getElementById('staticImage');
   const pinsPanel = document.getElementById('pinsPanel');
   const mapStage = document.getElementById('mapStage');
 
@@ -17,7 +17,7 @@
   const DEFAULT_ZOOM = 4;
 
   let map = null;
-  let markerLayer = null;       // holds all current markers
+  let markerLayer = null;
   const pinMarkers = new Map(); // pin.id -> L.Marker
 
   function initMap() {
@@ -36,12 +36,9 @@
 
     markerLayer = L.layerGroup().addTo(map);
 
-    // Click on map = add new pin (respecting read-only + section visibility)
     map.on('click', (e) => {
       if (isReadOnly()) return;
       if (page === 'maps' && !currentMap) return;
-      // Ignore clicks that hit a marker (Leaflet fires map click after marker click otherwise)
-      // We detect by checking if the click target is inside a marker element
       const orig = e.originalEvent;
       if (orig && orig.target && orig.target.closest && orig.target.closest('.leaflet-marker-icon')) return;
 
@@ -58,6 +55,38 @@
       renderAll();
       openPopup(newPin);
     });
+  }
+
+  /* ─────────────── TRACK LOOKUP (via Edge Function proxy) ─────────────── */
+  async function lookupTrackLocation(trackName) {
+    if (!trackName || trackName.trim().length < 3) return null;
+    if (!window.BMX?.sb?.functions) {
+      console.warn('Supabase functions not available');
+      return null;
+    }
+
+    try {
+      const { data, error } = await window.BMX.sb.functions.invoke('geocode-track', {
+        body: { query: trackName.trim() }
+      });
+
+      if (error) {
+        console.error('Track lookup error:', error);
+        return null;
+      }
+
+      if (!Array.isArray(data) || data.length === 0) return null;
+
+      const result = data[0];
+      const lat = parseFloat(result.lat);
+      const lng = parseFloat(result.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+      return { lat, lng, displayName: result.display_name || '' };
+    } catch (err) {
+      console.error('Track lookup failed:', err);
+      return null;
+    }
   }
 
   /* ─────────────── USER MAPS ─────────────── */
@@ -342,7 +371,6 @@
 
   function openPopup(pin) {
     if (!map) return;
-    // close any previous
     if (activePopupPinId != null) {
       const prev = pinMarkers.get(activePopupPinId);
       if (prev && prev.isPopupOpen && prev.isPopupOpen()) prev.closePopup();
@@ -362,13 +390,23 @@
     const hasLocation = pin.city || pin.state || pin.address;
     const locationLine = [pin.address, pin.city, pin.state].filter(Boolean).join(', ');
 
+    // Show lookup button for non-read-only pins (both race and other kinds)
+    const showLookup = !ro;
+
     const html = `
       <div class="pin-popup pin-popup-inline">
         <div class="pin-popup-header">
           <h4>${pin.kind.toUpperCase()}${ro ? ' · READ ONLY' : ''}</h4>
           <button class="pin-popup-close" type="button">×</button>
         </div>
-        <div><label>Title</label><input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" ${ro ? 'readonly' : ''}></div>
+        <div>
+          <label>Title</label>
+          <div class="pin-title-row">
+            <input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" ${ro ? 'readonly' : ''}>
+            ${showLookup ? `<button class="pin-lookup-btn" type="button" title="Look up track location">📍</button>` : ''}
+          </div>
+          <div class="pin-lookup-status" style="display:none;"></div>
+        </div>
         ${hasLocation ? `<div><label>Location</label><div class="pin-popup-static">${escapeHtml(locationLine)}</div></div>` : ''}
         ${pin.phone ? `<div><label>Phone</label><a class="pin-popup-link" href="tel:${escapeHtml(String(pin.phone).replace(/[^\d+]/g,''))}">${escapeHtml(pin.phone)}</a></div>` : ''}
         ${pin.website ? `<div><label>Website</label><a class="pin-popup-link" href="${escapeHtml(pin.website)}" target="_blank" rel="noopener">${escapeHtml(pin.website)}</a></div>` : ''}
@@ -402,7 +440,6 @@
       .setContent(html)
       .openOn(map);
 
-    // Wire buttons after Leaflet injects the HTML into the DOM
     setTimeout(() => {
       const el = popup.getElement();
       if (!el) return;
@@ -411,6 +448,57 @@
       if (closeBtn) closeBtn.onclick = closePopup;
       const close2 = el.querySelector('.pin-popup-close-2');
       if (close2) close2.onclick = closePopup;
+
+      // ── Lookup button ──
+      const lookupBtn = el.querySelector('.pin-lookup-btn');
+      const statusEl = el.querySelector('.pin-lookup-status');
+      const titleInput = el.querySelector('.f-title');
+
+      if (lookupBtn && titleInput && statusEl) {
+        lookupBtn.addEventListener('click', async () => {
+          const name = titleInput.value.trim();
+          if (name.length < 3) {
+            statusEl.style.display = '';
+            statusEl.className = 'pin-lookup-status is-error';
+            statusEl.textContent = 'Type a track name first.';
+            return;
+          }
+
+          lookupBtn.disabled = true;
+          lookupBtn.textContent = '…';
+          statusEl.style.display = '';
+          statusEl.className = 'pin-lookup-status is-loading';
+          statusEl.textContent = 'Looking up…';
+
+          const found = await lookupTrackLocation(name);
+
+          lookupBtn.disabled = false;
+          lookupBtn.textContent = '📍';
+
+          if (!found) {
+            statusEl.className = 'pin-lookup-status is-error';
+            statusEl.textContent = 'No match found. Drag the pin to place it manually.';
+            return;
+          }
+
+          // Move the pin
+          pin.lat = found.lat;
+          pin.lng = found.lng;
+          persist();
+          renderPins();
+
+          const newMarker = pinMarkers.get(pin.id);
+          if (newMarker) {
+            popup.setLatLng(newMarker.getLatLng());
+            map.panTo(newMarker.getLatLng());
+          }
+
+          statusEl.className = 'pin-lookup-status is-ok';
+          statusEl.textContent = found.displayName
+            ? `Moved to: ${found.displayName}`
+            : 'Pin moved to matched location.';
+        });
+      }
 
       const delBtn = el.querySelector('.pin-popup-delete');
       if (delBtn) delBtn.onclick = () => {
@@ -424,7 +512,7 @@
 
       const savePinBtn = el.querySelector('.pin-popup-save');
       if (savePinBtn) savePinBtn.onclick = () => {
-        pin.title = el.querySelector('.f-title').value.trim();
+        pin.title = titleInput.value.trim();
         const dEl = el.querySelector('.f-desc'); if (dEl) pin.description = dEl.value.trim();
         const rEl = el.querySelector('.f-racer'); if (rEl) pin.racer = rEl.value.trim();
         const dtEl = el.querySelector('.f-date'); if (dtEl) pin.date = dtEl.value;
@@ -437,8 +525,6 @@
         renderAll();
       };
 
-      // After opening, if the marker was updated by the renderPins() above,
-      // make sure the popup tracks the latest marker position
       const latest = pinMarkers.get(pin.id);
       if (latest) popup.setLatLng(latest.getLatLng());
     }, 0);
@@ -716,8 +802,6 @@
     renderAll();
     renderMapLists();
     updateSaveButtonVisibility();
-
-    // Fit the map to the loaded pins
     fitMapToPins();
   }
 
@@ -827,7 +911,6 @@
     });
   }
 
-  // If the container resizes, Leaflet needs a nudge to redraw
   window.addEventListener('resize', () => {
     if (map) setTimeout(() => map.invalidateSize(), 100);
   });
