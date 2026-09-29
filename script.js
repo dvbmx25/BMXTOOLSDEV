@@ -64,10 +64,10 @@
 
   /* ─────────────── LAT/LNG → X/Y CONVERTER ─────────────── */
 const MAP_BOUNDS = {
-  minLat: 24.2,   // Bottom edge of the map
-  maxLat: 49.8,   // Top edge of the map
-  minLng: -125.5, // Left edge of the map
-  maxLng: -66.5   // Right edge of the map
+  minLat: 24.5,
+  maxLat: 49.5,
+  minLng: -125,
+  maxLng: -66.5
 };
 
   function latLngToXY(lat, lng) {
