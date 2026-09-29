@@ -789,24 +789,7 @@
     renderMapLists();
     updateSaveButtonVisibility();
 
-    // Auto-zoom to fit the state if the map is a single-state USA BMX map
-    if (src.group === 'usabmx' && pins.length) {
-      setTimeout(() => {
-        // Average pin positions (ignore AK/HI inset ones)
-        const normal = pins.filter(p => p.state !== 'AK' && p.state !== 'HI');
-        if (normal.length) {
-          let cx = 0, cy = 0, count = 0;
-          normal.forEach(p => {
-            const pos = p.lat && p.lng ? latLngToXY(p.lat, p.lng) : null;
-            if (pos) { cx += pos.x; cy += pos.y; count++; }
-          });
-          if (count) {
-            cx /= count; cy /= count;
-            zoomToPin({ x: cx, y: cy });
-          }
-        }
-      }, 100);
-    }
+  
   }
 
   function updateSaveButtonVisibility() {
