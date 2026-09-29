@@ -2,6 +2,7 @@
   const wrapper = document.getElementById('imageWrapper');
   const staticImage = document.getElementById('staticImage');
   const pinsPanel = document.getElementById('pinsPanel');
+  const stage = document.getElementById('mapStage');
 
   if (!wrapper || !staticImage || !pinsPanel) return;
 
@@ -91,23 +92,21 @@
     };
   }
 
-  /* ─────────────── ZOOM (stage-based, no auto-zoom) ─────────────── */
+  /* ─────────────── ZOOM (stage-based, manual only) ─────────────── */
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 4;
   const ZOOM_STEP = 1.5;
   const zoomState = { scale: 1, tx: 0, ty: 0 };
 
   function getStage() {
-    return document.getElementById('mapStage');
+    return document.getElementById('mapStage') || staticImage.parentElement;
   }
 
   function applyZoom() {
-    const stage = getStage();
-    if (!stage) return;
-    // The stage wraps the image AND the pins live inside it.
-    // Scale the stage once, and both move together.
-    stage.style.transformOrigin = '0 0';
-    stage.style.transform = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
+    const s = getStage();
+    if (!s) return;
+    s.style.transformOrigin = '0 0';
+    s.style.transform = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
   }
 
   function resetZoom() {
@@ -325,11 +324,10 @@
 
   /* ─────────────── RENDER PINS ─────────────── */
   function renderPins() {
-    const stage = getStage();
-    if (!stage) return;
+    const s = getStage();
+    if (!s) return;
 
-    // Only clear pins that live inside the stage
-    stage.querySelectorAll('.pin').forEach(el => el.remove());
+    s.querySelectorAll('.pin').forEach(el => el.remove());
 
     const akTotal = pins.filter(p => p.state === 'AK').length;
     const hiTotal = pins.filter(p => p.state === 'HI').length;
@@ -354,7 +352,7 @@
       el.dataset.x = pos.x;
       el.dataset.y = pos.y;
       el.innerHTML = pinSvg(p.kind);
-      stage.appendChild(el);
+      s.appendChild(el);
     });
 
     applyZoom();
@@ -378,7 +376,8 @@
 
   /* ─────────────── POPUP ─────────────── */
   function closePopup() {
-    const existing = wrapper.querySelector('.pin-popup');
+    const s = getStage();
+    const existing = s ? s.querySelector('.pin-popup') : null;
     if (existing) existing.remove();
     activePopupPinId = null;
     renderPins();
@@ -428,7 +427,8 @@
           <button class="pin-popup-save" type="button">Save</button>`}
       </div>`;
 
-    wrapper.appendChild(popup);
+    const s = getStage();
+    if (s) s.appendChild(popup);
     applyZoom();
 
     popup.querySelector('.pin-popup-close').onclick = closePopup;
@@ -494,7 +494,8 @@
     persist();
     renderPins();
     renderAll();
-    const el = wrapper.querySelector(`.pin[data-id="${newPin.id}"]`);
+    const s = getStage();
+    const el = s ? s.querySelector(`.pin[data-id="${newPin.id}"]`) : null;
     if (el) openPopup(newPin);
   });
 
