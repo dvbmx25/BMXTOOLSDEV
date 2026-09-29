@@ -91,34 +91,16 @@
     };
   }
 
-  /* ─────────────── STATE ─────────────── */
-  let pins = [];
-  let nextId = 0;
-  let activePopupPinId = null;
-  let activeSection = 'race';
-
-  let currentMap = null;
-  let seedMaps = (typeof BMX_SEED_MAPS !== 'undefined') ? BMX_SEED_MAPS : [];
-
-  const sectionVisibility = {
-    race: true, track: true, dirt: true, pump: true, bikepark: true
-  };
-
-  /* ─────────────── ZOOM STATE ─────────────── */
-  // The map content sits inside #staticImage (an <img>). We apply CSS scale + translate
-  // to a "stage" element that holds both the image AND the pins, so they zoom together.
+  /* ─────────────── ZOOM (no auto-zoom, manual only) ─────────────── */
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 4;
   const ZOOM_STEP = 1.5;
   const zoomState = { scale: 1, tx: 0, ty: 0 };
 
   function applyZoom() {
-    // Apply transform to the image AND each pin individually
-    // (pins are absolutely positioned on top of the image, so we transform them with the same matrix)
     const m = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
     staticImage.style.transformOrigin = '0 0';
     staticImage.style.transform = m;
-
     wrapper.querySelectorAll('.pin, .pin-popup').forEach(el => {
       el.style.transformOrigin = '0 0';
       el.style.transform = m;
@@ -146,22 +128,18 @@
     applyZoom();
   }
 
-  // Zoom + center the map on a given pin position (percentages 0-100)
-  function zoomToPin(pos) {
-    const rect = wrapper.getBoundingClientRect();
-    const imgW = staticImage.clientWidth || rect.width;
-    const imgH = staticImage.clientHeight || rect.height;
+  /* ─────────────── STATE ─────────────── */
+  let pins = [];
+  let nextId = 0;
+  let activePopupPinId = null;
+  let activeSection = 'race';
 
-    const targetScale = 2.5;
-    // Where the pin is in the image, in image-local pixels
-    const px = (pos.x / 100) * imgW;
-    const py = (pos.y / 100) * imgH;
-    // We want that pixel to appear at the center of the visible wrapper
-    zoomState.scale = targetScale;
-    zoomState.tx = rect.width / 2 - px * targetScale;
-    zoomState.ty = rect.height / 2 - py * targetScale;
-    applyZoom();
-  }
+  let currentMap = null;
+  let seedMaps = (typeof BMX_SEED_MAPS !== 'undefined') ? BMX_SEED_MAPS : [];
+
+  const sectionVisibility = {
+    race: true, track: true, dirt: true, pump: true, bikepark: true
+  };
 
   /* ─────────────── HELPERS ─────────────── */
   function escapeHtml(str) {
@@ -258,7 +236,6 @@
       });
     });
 
-    // Inject zoom controls into the image wrapper
     injectZoomControls();
   }
 
@@ -491,18 +468,16 @@
     return el ? el.value.trim() : '';
   }
 
-  /* ─────────────── MAP CLICK = ADD PIN ─────────────── */
   wrapper.addEventListener('click', (e) => {
     if (e.target.closest('.pin') || e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
     if (isReadOnly()) return;
     if (page === 'maps' && !currentMap) return;
 
     const rect = wrapper.getBoundingClientRect();
-    // Account for zoom
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
-    const x = ((rawX - zoomState.translateX) / zoomState.scale / rect.width) * 100;
-    const y = ((rawY - zoomState.translateY) / zoomState.scale / rect.height) * 100;
+    const x = ((rawX - zoomState.tx) / zoomState.scale / rect.width) * 100;
+    const y = ((rawY - zoomState.ty) / zoomState.scale / rect.height) * 100;
 
     const newPin = {
       id: ++nextId, kind: activeSection, x, y,
@@ -532,7 +507,6 @@
     openPopup(pin);
   });
 
-  /* ─────────────── SECTION REFS ─────────────── */
   Object.keys(sections).forEach(kind => {
     const sec = sections[kind];
     if (!sec.el) return;
@@ -578,7 +552,6 @@
     sec.el.addEventListener('mousedown', () => { activeSection = kind; });
   });
 
-  /* ─────────────── SAVE BUTTON ─────────────── */
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
       if (page === 'creator') {
@@ -678,14 +651,12 @@
     setTimeout(() => { saveBtn.textContent = original; saveBtn.disabled = false; }, 900);
   }
 
-  /* ─────────────── MAP LIST RENDERING (grouped) ─────────────── */
   function renderMapLists() {
     if (page !== 'maps') return;
     const seedList = document.getElementById('seedMapList');
     const userList = document.getElementById('userMapList');
     if (!seedList || !userList) return;
 
-    // Group seed maps by `group`
     const grouped = { usabmx: [] };
     const ungrouped = [];
     seedMaps.forEach(m => {
@@ -697,7 +668,6 @@
       }
     });
 
-    // Sort state maps alphabetically
     if (grouped.usabmx) {
       grouped.usabmx.sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -724,7 +694,6 @@
 
     seedList.innerHTML = html || `<li class="map-list-empty">No curated maps yet.</li>`;
 
-    // Wire sub-group toggle
     seedList.querySelectorAll('.map-list-group-header').forEach(h => {
       h.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -748,7 +717,6 @@
       const inUser = userMaps.some(m => m.id === currentMap.id);
       if (inSeed && seedGroup) seedGroup.classList.add('open');
       if (inUser && userGroup) userGroup.classList.add('open');
-      // Open USA BMX group if active map is in it
       if (inSeed) {
         const grp = seedList.querySelector('.map-list-sub[data-subgroup="usabmx"]');
         const hdr = seedList.querySelector('.map-list-group-header[data-group="usabmx"]');
@@ -788,8 +756,6 @@
     renderAll();
     renderMapLists();
     updateSaveButtonVisibility();
-
-  
   }
 
   function updateSaveButtonVisibility() {
