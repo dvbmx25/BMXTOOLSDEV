@@ -103,29 +103,34 @@
     return document.getElementById('mapStage') || staticImage.parentElement;
   }
 
+  /* Cached wrapper size — invalidated on resize so we don't reflow every frame. */
+  let _wrapperSize = null;
+  function getWrapperSize() {
+    if (_wrapperSize) return _wrapperSize;
+    if (!wrapper) return { w: 0, h: 0 };
+    _wrapperSize = { w: wrapper.clientWidth, h: wrapper.clientHeight };
+    return _wrapperSize;
+  }
+  window.addEventListener('resize', () => { _wrapperSize = null; });
+
   function clampPan() {
-    const s = getStage();
-    if (!s || !wrapper) return;
-    const w = wrapper.clientWidth;
-    const h = wrapper.clientHeight;
+    const { w, h } = getWrapperSize();
+    if (!w || !h) return;
     const scaledW = w * zoomState.scale;
     const scaledH = h * zoomState.scale;
-
     const minTx = Math.min(0, w - scaledW);
-    const maxTx = 0;
     const minTy = Math.min(0, h - scaledH);
-    const maxTy = 0;
-
-    zoomState.tx = Math.max(minTx, Math.min(maxTx, zoomState.tx));
-    zoomState.ty = Math.max(minTy, Math.min(maxTy, zoomState.ty));
+    if (zoomState.tx > 0) zoomState.tx = 0;
+    if (zoomState.tx < minTx) zoomState.tx = minTx;
+    if (zoomState.ty > 0) zoomState.ty = 0;
+    if (zoomState.ty < minTy) zoomState.ty = minTy;
   }
 
   function applyZoom() {
     const s = getStage();
     if (!s) return;
-    s.style.transformOrigin = '0 0';
     clampPan();
-    s.style.transform = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
+    s.style.transform = `translate3d(${zoomState.tx}px, ${zoomState.ty}px, 0) scale(${zoomState.scale})`;
     if (wrapper) wrapper.classList.toggle('pannable', zoomState.scale > 1);
   }
 
@@ -165,13 +170,26 @@
     zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / ZOOM_STEP);
   }
 
+  /* ─────────────── WHEEL ZOOM (rAF-throttled) ─────────────── */
+  let wheelRaf = null;
+  let pendingWheel = null;
+
   wrapper.addEventListener('wheel', (e) => {
     if (e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
     e.preventDefault();
-    const factor = Math.exp(-e.deltaY * WHEEL_STEP);
-    zoomAt(e.clientX, e.clientY, factor);
+    pendingWheel = { x: e.clientX, y: e.clientY, dy: e.deltaY };
+    if (wheelRaf) return;
+    wheelRaf = requestAnimationFrame(() => {
+      wheelRaf = null;
+      if (!pendingWheel) return;
+      const { x, y, dy } = pendingWheel;
+      pendingWheel = null;
+      const factor = Math.exp(-dy * WHEEL_STEP);
+      zoomAt(x, y, factor);
+    });
   }, { passive: false });
 
+  /* ─────────────── DRAG-TO-PAN ─────────────── */
   let isPanning = false;
   let panStart = null;
   let panMoved = false;
