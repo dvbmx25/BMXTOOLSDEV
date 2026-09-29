@@ -91,20 +91,23 @@
     };
   }
 
-  /* ─────────────── ZOOM (no auto-zoom, manual only) ─────────────── */
+  /* ─────────────── ZOOM (stage-based, no auto-zoom) ─────────────── */
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 4;
   const ZOOM_STEP = 1.5;
   const zoomState = { scale: 1, tx: 0, ty: 0 };
 
+  function getStage() {
+    return document.getElementById('mapStage');
+  }
+
   function applyZoom() {
-    const m = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
-    staticImage.style.transformOrigin = '0 0';
-    staticImage.style.transform = m;
-    wrapper.querySelectorAll('.pin, .pin-popup').forEach(el => {
-      el.style.transformOrigin = '0 0';
-      el.style.transform = m;
-    });
+    const stage = getStage();
+    if (!stage) return;
+    // The stage wraps the image AND the pins live inside it.
+    // Scale the stage once, and both move together.
+    stage.style.transformOrigin = '0 0';
+    stage.style.transform = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
   }
 
   function resetZoom() {
@@ -322,7 +325,11 @@
 
   /* ─────────────── RENDER PINS ─────────────── */
   function renderPins() {
-    wrapper.querySelectorAll('.pin').forEach(el => el.remove());
+    const stage = getStage();
+    if (!stage) return;
+
+    // Only clear pins that live inside the stage
+    stage.querySelectorAll('.pin').forEach(el => el.remove());
 
     const akTotal = pins.filter(p => p.state === 'AK').length;
     const hiTotal = pins.filter(p => p.state === 'HI').length;
@@ -347,7 +354,7 @@
       el.dataset.x = pos.x;
       el.dataset.y = pos.y;
       el.innerHTML = pinSvg(p.kind);
-      wrapper.appendChild(el);
+      stage.appendChild(el);
     });
 
     applyZoom();
