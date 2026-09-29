@@ -105,28 +105,30 @@
   };
 
   /* ─────────────── ZOOM STATE ─────────────── */
-  const zoomState = { scale: 1, translateX: 0, translateY: 0 };
+  // The map content sits inside #staticImage (an <img>). We apply CSS scale + translate
+  // to a "stage" element that holds both the image AND the pins, so they zoom together.
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 4;
   const ZOOM_STEP = 1.5;
+  const zoomState = { scale: 1, tx: 0, ty: 0 };
 
   function applyZoom() {
-    const img = staticImage;
-    const pinned = wrapper.querySelectorAll('.pin, .pin-popup');
-    if (img) {
-      img.style.transformOrigin = '0 0';
-      img.style.transform = `translate(${zoomState.translateX}px, ${zoomState.translateY}px) scale(${zoomState.scale})`;
-    }
-    pinned.forEach(el => {
+    // Apply transform to the image AND each pin individually
+    // (pins are absolutely positioned on top of the image, so we transform them with the same matrix)
+    const m = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
+    staticImage.style.transformOrigin = '0 0';
+    staticImage.style.transform = m;
+
+    wrapper.querySelectorAll('.pin, .pin-popup').forEach(el => {
       el.style.transformOrigin = '0 0';
-      el.style.transform = `translate(${zoomState.translateX}px, ${zoomState.translateY}px) scale(${zoomState.scale})`;
+      el.style.transform = m;
     });
   }
 
   function resetZoom() {
     zoomState.scale = 1;
-    zoomState.translateX = 0;
-    zoomState.translateY = 0;
+    zoomState.tx = 0;
+    zoomState.ty = 0;
     applyZoom();
   }
 
@@ -138,23 +140,26 @@
   function zoomOut() {
     zoomState.scale = Math.max(zoomState.scale / ZOOM_STEP, ZOOM_MIN);
     if (zoomState.scale === 1) {
-      zoomState.translateX = 0;
-      zoomState.translateY = 0;
+      zoomState.tx = 0;
+      zoomState.ty = 0;
     }
     applyZoom();
   }
 
-  // Given a pin's x/y percent (0-100), zoom + center the map on it
+  // Zoom + center the map on a given pin position (percentages 0-100)
   function zoomToPin(pos) {
     const rect = wrapper.getBoundingClientRect();
-    const targetScale = 3;
-    // Position of pin in wrapper pixels (unzoomed)
-    const pinPx = (pos.x / 100) * rect.width;
-    const pinPy = (pos.y / 100) * rect.height;
-    // We want the pin to appear at the center of the wrapper
+    const imgW = staticImage.clientWidth || rect.width;
+    const imgH = staticImage.clientHeight || rect.height;
+
+    const targetScale = 2.5;
+    // Where the pin is in the image, in image-local pixels
+    const px = (pos.x / 100) * imgW;
+    const py = (pos.y / 100) * imgH;
+    // We want that pixel to appear at the center of the visible wrapper
     zoomState.scale = targetScale;
-    zoomState.translateX = rect.width / 2 - pinPx * targetScale;
-    zoomState.translateY = rect.height / 2 - pinPy * targetScale;
+    zoomState.tx = rect.width / 2 - px * targetScale;
+    zoomState.ty = rect.height / 2 - py * targetScale;
     applyZoom();
   }
 
