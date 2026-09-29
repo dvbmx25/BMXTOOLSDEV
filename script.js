@@ -47,7 +47,8 @@
         kind: activeSection,
         lat: e.latlng.lat,
         lng: e.latlng.lng,
-        title: '', racer: '', date: '', age: '', description: '', results: ''
+        title: '', racer: '', date: '', age: '', ageList: 'standard',
+        description: '', results: ''
       };
       pins.push(newPin);
       persist();
@@ -55,38 +56,6 @@
       renderAll();
       openPopup(newPin);
     });
-  }
-
-  /* ─────────────── TRACK LOOKUP (via Edge Function proxy) ─────────────── */
-  async function lookupTrackLocation(trackName) {
-    if (!trackName || trackName.trim().length < 3) return null;
-    if (!window.BMX?.sb?.functions) {
-      console.warn('Supabase functions not available');
-      return null;
-    }
-
-    try {
-      const { data, error } = await window.BMX.sb.functions.invoke('geocode-track', {
-        body: { query: trackName.trim() }
-      });
-
-      if (error) {
-        console.error('Track lookup error:', error);
-        return null;
-      }
-
-      if (!Array.isArray(data) || data.length === 0) return null;
-
-      const result = data[0];
-      const lat = parseFloat(result.lat);
-      const lng = parseFloat(result.lon);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-      return { lat, lng, displayName: result.display_name || '' };
-    } catch (err) {
-      console.error('Track lookup failed:', err);
-      return null;
-    }
   }
 
   /* ─────────────── USER MAPS ─────────────── */
@@ -390,23 +359,13 @@
     const hasLocation = pin.city || pin.state || pin.address;
     const locationLine = [pin.address, pin.city, pin.state].filter(Boolean).join(', ');
 
-    // Show lookup button for non-read-only pins (both race and other kinds)
-    const showLookup = !ro;
-
     const html = `
       <div class="pin-popup pin-popup-inline">
         <div class="pin-popup-header">
           <h4>${pin.kind.toUpperCase()}${ro ? ' · READ ONLY' : ''}</h4>
           <button class="pin-popup-close" type="button">×</button>
         </div>
-        <div>
-          <label>Title</label>
-          <div class="pin-title-row">
-            <input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" ${ro ? 'readonly' : ''}>
-           
-          </div>
-          <div class="pin-lookup-status" style="display:none;"></div>
-        </div>
+        <div><label>Title</label><input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" ${ro ? 'readonly' : ''}></div>
         ${hasLocation ? `<div><label>Location</label><div class="pin-popup-static">${escapeHtml(locationLine)}</div></div>` : ''}
         ${pin.phone ? `<div><label>Phone</label><a class="pin-popup-link" href="tel:${escapeHtml(String(pin.phone).replace(/[^\d+]/g,''))}">${escapeHtml(pin.phone)}</a></div>` : ''}
         ${pin.website ? `<div><label>Website</label><a class="pin-popup-link" href="${escapeHtml(pin.website)}" target="_blank" rel="noopener">${escapeHtml(pin.website)}</a></div>` : ''}
@@ -415,7 +374,16 @@
         <div><label>Racer</label><input type="text" class="f-racer" value="${escapeHtml(pin.racer || '')}" ${ro ? 'readonly' : ''}></div>
         <div class="pin-popup-row">
           <div><label>Date</label><input type="date" class="f-date" value="${escapeHtml(pin.date || '')}" ${ro ? 'readonly' : ''}></div>
-          <div><label>Age Group</label><select class="f-age" ${ro ? 'disabled' : ''}>${buildOptions(ageList, pin.age || '', 'Select age…')}</select></div>
+          <div><label>Class</label>
+            <select class="f-class" ${ro ? 'disabled' : ''}>
+              <option value="standard"${(!pin.ageList || pin.ageList === 'standard') ? ' selected' : ''}>Standard</option>
+              <option value="boysCruiser"${pin.ageList === 'boysCruiser' ? ' selected' : ''}>Boys Cruiser</option>
+              <option value="girlsCruiser"${pin.ageList === 'girlsCruiser' ? ' selected' : ''}>Girls Cruiser</option>
+            </select>
+          </div>
+        </div>
+        <div class="pin-popup-row">
+          <div style="flex:1;"><label>Age Group</label><select class="f-age" ${ro ? 'disabled' : ''}>${buildOptions(ageList, pin.age || '', 'Select age…')}</select></div>
         </div>
         <div><label>Event / Notes</label><textarea class="f-desc event-field" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea></div>
         <div><label>Results</label><textarea class="f-results results-field" ${ro ? 'readonly' : ''}>${escapeHtml(pin.results || '')}</textarea></div>
@@ -449,54 +417,15 @@
       const close2 = el.querySelector('.pin-popup-close-2');
       if (close2) close2.onclick = closePopup;
 
-      // ── Lookup button ──
-      const lookupBtn = el.querySelector('.pin-lookup-btn');
-      const statusEl = el.querySelector('.pin-lookup-status');
-      const titleInput = el.querySelector('.f-title');
-
-      if (lookupBtn && titleInput && statusEl) {
-        lookupBtn.addEventListener('click', async () => {
-          const name = titleInput.value.trim();
-          if (name.length < 3) {
-            statusEl.style.display = '';
-            statusEl.className = 'pin-lookup-status is-error';
-            statusEl.textContent = 'Type a track name first.';
-            return;
-          }
-
-          lookupBtn.disabled = true;
-          lookupBtn.textContent = '…';
-          statusEl.style.display = '';
-          statusEl.className = 'pin-lookup-status is-loading';
-          statusEl.textContent = 'Looking up…';
-
-          const found = await lookupTrackLocation(name);
-
-          lookupBtn.disabled = false;
-          lookupBtn.textContent = '📍';
-
-          if (!found) {
-            statusEl.className = 'pin-lookup-status is-error';
-            statusEl.textContent = 'No match found. Drag the pin to place it manually.';
-            return;
-          }
-
-          // Move the pin
-          pin.lat = found.lat;
-          pin.lng = found.lng;
-          persist();
-          renderPins();
-
-          const newMarker = pinMarkers.get(pin.id);
-          if (newMarker) {
-            popup.setLatLng(newMarker.getLatLng());
-            map.panTo(newMarker.getLatLng());
-          }
-
-          statusEl.className = 'pin-lookup-status is-ok';
-          statusEl.textContent = found.displayName
-            ? `Moved to: ${found.displayName}`
-            : 'Pin moved to matched location.';
+      // Wire class → age dropdown cascade
+      const classEl = el.querySelector('.f-class');
+      const ageEl = el.querySelector('.f-age');
+      if (classEl && ageEl) {
+        classEl.addEventListener('change', () => {
+          const list = classEl.value === 'boysCruiser' ? AGE_OPTIONS_BOYS_CRUISER
+                    : classEl.value === 'girlsCruiser' ? AGE_OPTIONS_GIRLS_CRUISER
+                    : AGE_OPTIONS_STANDARD;
+          ageEl.innerHTML = buildOptions(list, '', 'Select age…');
         });
       }
 
@@ -512,12 +441,13 @@
 
       const savePinBtn = el.querySelector('.pin-popup-save');
       if (savePinBtn) savePinBtn.onclick = () => {
-        pin.title = titleInput.value.trim();
+        pin.title = el.querySelector('.f-title').value.trim();
         const dEl = el.querySelector('.f-desc'); if (dEl) pin.description = dEl.value.trim();
         const rEl = el.querySelector('.f-racer'); if (rEl) pin.racer = rEl.value.trim();
         const dtEl = el.querySelector('.f-date'); if (dtEl) pin.date = dtEl.value;
         const aEl = el.querySelector('.f-age'); if (aEl) pin.age = aEl.value;
         const resEl = el.querySelector('.f-results'); if (resEl) pin.results = resEl.value.trim();
+        const clsEl = el.querySelector('.f-class'); if (clsEl) pin.ageList = clsEl.value;
         persist();
         map.closePopup(popup);
         activePopupPinId = null;
@@ -807,8 +737,7 @@
 
   function fitMapToPins() {
     if (!map) return;
-    const valid = pins
-      .map(p => [Number(p.lat), Number(p.lng)])
+    const valid = pins      .map(p => [Number(p.lat), Number(p.lng)])
       .filter(([la, ln]) => Number.isFinite(la) && Number.isFinite(ln));
     if (!valid.length) {
       map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
