@@ -92,43 +92,7 @@
     };
   }
 
-  /* ─────────────── ZOOM (stage-based, manual only) ─────────────── */
-  const ZOOM_MIN = 1;
-  const ZOOM_MAX = 4;
-  const ZOOM_STEP = 1.5;
-  const zoomState = { scale: 1, tx: 0, ty: 0 };
 
-  function getStage() {
-    return document.getElementById('mapStage') || staticImage.parentElement;
-  }
-
-  function applyZoom() {
-    const s = getStage();
-    if (!s) return;
-    s.style.transformOrigin = '0 0';
-    s.style.transform = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
-  }
-
-  function resetZoom() {
-    zoomState.scale = 1;
-    zoomState.tx = 0;
-    zoomState.ty = 0;
-    applyZoom();
-  }
-
-  function zoomIn() {
-    zoomState.scale = Math.min(zoomState.scale * ZOOM_STEP, ZOOM_MAX);
-    applyZoom();
-  }
-
-  function zoomOut() {
-    zoomState.scale = Math.max(zoomState.scale / ZOOM_STEP, ZOOM_MIN);
-    if (zoomState.scale === 1) {
-      zoomState.tx = 0;
-      zoomState.ty = 0;
-    }
-    applyZoom();
-  }
   /* ─────────────── ZOOM + PAN (stage-based) ─────────────── */
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 6;
