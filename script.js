@@ -13,7 +13,6 @@
   const LS_DRAFT = 'bmxtools.creatorDraft';
   const LS_USER_MAPS = 'bmxtools.userMaps';
 
-  // In-memory cache of the user's maps so readUserMaps() stays synchronous.
   let userMapsCache = [];
 
   function readLocalUserMaps() {
@@ -23,19 +22,12 @@
   function writeLocalUserMaps(list) {
     try { localStorage.setItem(LS_USER_MAPS, JSON.stringify(list)); } catch {}
   }
-
-  // Returns the cached list — populated by loadUserMaps() at boot and after writes.
-  function readUserMaps() {
-    return userMapsCache;
-  }
-
-  // Still used by write-path code for now (until write migration lands).
+  function readUserMaps() { return userMapsCache; }
   function writeUserMaps(list) {
     userMapsCache = list;
     writeLocalUserMaps(list);
   }
 
-  // Load maps from Supabase when logged in, else from localStorage.
   async function loadUserMaps() {
     const user = window.BMX?.auth?.getUser();
     if (user && window.BMX?.sb) {
@@ -61,7 +53,6 @@
       userMapsCache = readLocalUserMaps();
     }
 
-    // If the maps page is open, redraw its sidebar
     if (page === 'maps' && typeof renderMapLists === 'function') {
       renderMapLists();
     }
@@ -73,6 +64,51 @@
   }
   function writeDraft(data) {
     try { localStorage.setItem(LS_DRAFT, JSON.stringify(data)); } catch {}
+  }
+
+  /* ─────────────── LAT/LNG → X/Y CONVERTER ───────────────
+     Approximates the US map projection for the continental US.
+     Alaska and Hawaii are handled via manual overrides further down. */
+  const MAP_BOUNDS = {
+    minLat: 24.5,
+    maxLat: 49.5,
+    minLng: -125,
+    maxLng: -66.5
+  };
+
+  function latLngToXY(lat, lng) {
+    const nLat = Number(lat);
+    const nLng = Number(lng);
+    if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return null;
+    const x = ((nLng - MAP_BOUNDS.minLng) / (MAP_BOUNDS.maxLng - MAP_BOUNDS.minLng)) * 100;
+    const y = ((MAP_BOUNDS.maxLat - nLat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat)) * 100;
+    return { x, y };
+  }
+
+  // Alaska and Hawaii inset positions (percentages of the map image)
+  const AK_INSET = { x: 12, y: 82 };
+  const HI_INSET = { x: 32, y: 88 };
+
+  // Spread multiple AK or HI pins so they don't stack
+  function insetWithOffset(inset, index, total) {
+    const spread = 6; // percent
+    if (total <= 1) return { x: inset.x, y: inset.y };
+    const angle = (index / total) * Math.PI * 2;
+    return {
+      x: inset.x + Math.cos(angle) * spread,
+      y: inset.y + Math.sin(angle) * spread
+    };
+  }
+
+  // Given a raw pin, compute its final x/y (either from lat/lng or from stored x/y)
+  function resolvePinPosition(pin, akIndex = 0, akTotal = 1, hiIndex = 0, hiTotal = 1) {
+    if (pin.state === 'AK') return insetWithOffset(AK_INSET, akIndex, akTotal);
+    if (pin.state === 'HI') return insetWithOffset(HI_INSET, hiIndex, hiTotal);
+    if (pin.lat && pin.lng) {
+      const pos = latLngToXY(pin.lat, pin.lng);
+      if (pos) return pos;
+    }
+    return { x: pin.x, y: pin.y };
   }
 
   /* ─────────────── SUPABASE WRITE HELPERS ─────────────── */
@@ -125,9 +161,6 @@
     return { ok: true };
   }
 
-  /* ─────────────── ONE-TIME MIGRATION ───────────────
-     If the user is logged in, has nothing in Supabase yet,
-     but has maps in localStorage, upload them once. */
   async function migrateLocalMapsIfNeeded() {
     const user = window.BMX?.auth?.getUser();
     if (!user || !window.BMX?.sb) return;
@@ -135,7 +168,6 @@
     const local = readLocalUserMaps();
     if (!local.length) return;
 
-    // Only migrate if Supabase has zero maps for this user
     const { count, error } = await window.BMX.sb
       .from('maps')
       .select('*', { count: 'exact', head: true });
@@ -153,8 +185,6 @@
       console.error('Map migration failed:', insertErr);
       return;
     }
-
-    // Keep localStorage as a backup (don't delete), but let users know
     console.log(`Migrated ${rows.length} map(s) to your account.`);
   }
 
@@ -164,8 +194,7 @@
   let activePopupPinId = null;
   let activeSection = 'race';
 
-  // On the maps page: currently loaded map (null = nothing selected yet)
-  let currentMap = null;       // { id, name, seed:true|false, pins:[...] }
+  let currentMap = null;
   let seedMaps = (typeof BMX_SEED_MAPS !== 'undefined') ? BMX_SEED_MAPS : [];
 
   const sectionVisibility = {
@@ -282,7 +311,6 @@
       </div>
       <button class="save-map-btn" id="saveMapBtn" style="display:none;">Save Changes</button>    `;
 
-    // Wire collapse toggles (start collapsed — no .open class)
     pinsPanel.querySelectorAll('.map-library-header').forEach(header => {
       header.addEventListener('click', () => {
         const group = header.closest('.map-library-group');
@@ -291,11 +319,9 @@
     });
   }
 
-  /* ─────────────── SIDEBAR BUILD DISPATCH ─────────────── */
   if (page === 'maps') buildMapsSidebar();
   else buildCreatorSidebar();
 
-  /* ─────────────── SECTION REFS ─────────────── */
   const sections = {};
   SECTION_KINDS.forEach(k => {
     sections[k.key] = {
@@ -353,6 +379,7 @@
       <li class="pin-item${p.id === activePopupPinId ? ' active' : ''}" data-id="${p.id}">
         <div class="pin-item-info">
           <div class="pin-item-title">${escapeHtml(p.title || 'Untitled')}</div>
+          ${p.city || p.state ? `<div class="pin-item-meta"><span>${escapeHtml([p.city, p.state].filter(Boolean).join(', '))}</span></div>` : ''}
           ${p.racer ? `<div class="pin-item-racer">${escapeHtml(p.racer)}</div>` : ''}
           ${p.date ? `<div class="pin-item-meta"><span>📅 ${formatDate(p.date)}</span>${p.age ? `<span>${escapeHtml(p.age)}</span>` : ''}</div>` : ''}
           ${p.description ? `<div class="pin-item-desc">${escapeHtml(p.description)}</div>` : ''}
@@ -366,19 +393,40 @@
   /* ─────────────── RENDER: MAP PINS ─────────────── */
   function renderPins() {
     wrapper.querySelectorAll('.pin').forEach(el => el.remove());
+
+    // Precompute AK/HI counts for offsetting
+    const akTotal = pins.filter(p => p.state === 'AK').length;
+    const hiTotal = pins.filter(p => p.state === 'HI').length;
+    let akSeen = 0, hiSeen = 0;
+
     pins.forEach(p => {
       if (!sectionVisibility[p.kind]) return;
+
+      let pos;
+      if (p.state === 'AK') {
+        pos = insetWithOffset(AK_INSET, akSeen, akTotal);
+        akSeen++;
+      } else if (p.state === 'HI') {
+        pos = insetWithOffset(HI_INSET, hiSeen, hiTotal);
+        hiSeen++;
+      } else if (p.lat && p.lng) {
+        pos = latLngToXY(p.lat, p.lng) || { x: p.x, y: p.y };
+      } else {
+        pos = { x: p.x, y: p.y };
+      }
+
+      if (!pos || pos.x == null || pos.y == null) return;
+
       const el = document.createElement('div');
       el.className = `pin kind-${p.kind}${p.id === activePopupPinId ? ' active' : ''}`;
-      el.style.left = p.x + '%';
-      el.style.top = p.y + '%';
+      el.style.left = pos.x + '%';
+      el.style.top = pos.y + '%';
       el.dataset.id = p.id;
       el.innerHTML = pinSvg(p.kind);
       wrapper.appendChild(el);
     });
   }
 
-  /* ─────────────── READ-ONLY CHECK ─────────────── */
   function isReadOnly() {
     return page === 'maps' && currentMap && currentMap.seed === true;
   }
@@ -392,20 +440,38 @@
     renderAll();
   }
 
+  // Find the rendered x/y for a pin so the popup can sit next to it
+  function getRenderedPosition(pin) {
+    const akTotal = pins.filter(p => p.state === 'AK').length;
+    const hiTotal = pins.filter(p => p.state === 'HI').length;
+    const akIndex = pins.filter(p => p.state === 'AK').slice(0, pins.indexOf(pin)).length;
+    const hiIndex = pins.filter(p => p.state === 'HI').slice(0, pins.indexOf(pin)).length;
+
+    if (pin.state === 'AK') return insetWithOffset(AK_INSET, akIndex, akTotal);
+    if (pin.state === 'HI') return insetWithOffset(HI_INSET, hiIndex, hiTotal);
+    if (pin.lat && pin.lng) return latLngToXY(pin.lat, pin.lng) || { x: pin.x, y: pin.y };
+    return { x: pin.x, y: pin.y };
+  }
+
   function openPopup(pin) {
     closePopup();
     activePopupPinId = pin.id;
 
+    const pos = getRenderedPosition(pin);
+
     const popup = document.createElement('div');
     popup.className = 'pin-popup';
-    popup.style.left = pin.x + '%';
-    popup.style.top = pin.y + '%';
+    popup.style.left = pos.x + '%';
+    popup.style.top = pos.y + '%';
 
     const ro = isReadOnly();
     const isRace = pin.kind === 'race';
     const ageList = pin.ageList === 'boysCruiser' ? AGE_OPTIONS_BOYS_CRUISER
                   : pin.ageList === 'girlsCruiser' ? AGE_OPTIONS_GIRLS_CRUISER
                   : AGE_OPTIONS_STANDARD;
+
+    const hasLocation = pin.city || pin.state || pin.address;
+    const locationLine = [pin.address, pin.city, pin.state].filter(Boolean).join(', ');
 
     popup.innerHTML = `
       <div class="pin-popup-header">
@@ -416,6 +482,35 @@
         <label>Title</label>
         <input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" placeholder="Name" ${ro ? 'readonly' : ''}>
       </div>
+
+      ${hasLocation ? `
+      <div>
+        <label>Location</label>
+        <div class="pin-popup-static">${escapeHtml(locationLine)}</div>
+      </div>
+      ` : ''}
+
+      ${pin.phone ? `
+      <div>
+        <label>Phone</label>
+        <a class="pin-popup-link" href="tel:${escapeHtml(pin.phone.replace(/[^\d+]/g, ''))}">${escapeHtml(pin.phone)}</a>
+      </div>
+      ` : ''}
+
+      ${pin.website ? `
+      <div>
+        <label>Website</label>
+        <a class="pin-popup-link" href="${escapeHtml(pin.website)}" target="_blank" rel="noopener">${escapeHtml(pin.website)}</a>
+      </div>
+      ` : ''}
+
+      ${pin.contact ? `
+      <div>
+        <label>Contact</label>
+        <div class="pin-popup-static">${escapeHtml(pin.contact)}</div>
+      </div>
+      ` : ''}
+
       ${isRace ? `
       <div>
         <label>Racer</label>
@@ -490,7 +585,6 @@
   }
 
   /* ─────────────── PERSIST ─────────────── */
-  // Where do edits go? Creator → draft. Maps page → user map (if editable).
   function persist() {
     if (page === 'creator') {
       writeDraft({ pins, name: getCreatorName(), savedAt: Date.now() });
@@ -516,7 +610,7 @@
   wrapper.addEventListener('click', (e) => {
     if (e.target.closest('.pin') || e.target.closest('.pin-popup')) return;
     if (isReadOnly()) return;
-    if (page === 'maps' && !currentMap) return; // must select a map first
+    if (page === 'maps' && !currentMap) return;
 
     const rect = wrapper.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -599,7 +693,7 @@
     });
   });
 
-  /* ─────────────── ACTIVE SECTION (which pin kind gets placed) ─────────────── */
+  /* ─────────────── ACTIVE SECTION ─────────────── */
   Object.keys(sections).forEach(kind => {
     const sec = sections[kind];
     if (!sec.el) return;
@@ -618,7 +712,6 @@
 
         const user = window.BMX?.auth?.getUser();
         if (user && window.BMX?.sb) {
-          // Save to Supabase
           const existing = userMapsCache.find(m => m.name === trimmed);
           let result;
           if (existing) {
@@ -638,7 +731,6 @@
           if (nameEl) nameEl.value = trimmed;
           window.alert(`Saved "${trimmed}" to your maps.`);
         } else {
-          // Fallback: save to localStorage (logged out)
           const userMaps = readLocalUserMaps();
           const existing = userMaps.find(m => m.name === trimmed);
           if (existing) {
@@ -674,7 +766,6 @@
           currentMap.pins = cleanPins;
           flashSaveButton('Saved!');
         } else {
-          // Fallback: localStorage
           const list = readLocalUserMaps();
           const idx = list.findIndex(m => m.id === currentMap.id);
           if (idx >= 0) {
@@ -701,16 +792,6 @@
     }, 900);
   }
 
-  function downloadJson(data) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bmx-map-${(data.name || mapId).replace(/\s+/g, '-').toLowerCase()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   /* ─────────────── MAPS PAGE: MAP LIST ─────────────── */
   function renderMapLists() {
     if (page !== 'maps') return;
@@ -728,7 +809,6 @@
       ? userMaps.map(m => mapListItemHtml(m, false)).join('')
       : `<li class="map-list-empty">No saved maps yet.<br>Create one on the Map Creator.</li>`;
 
-    // Auto-open whichever group holds the active map
     if (currentMap) {
       const seedGroup = document.getElementById('group-seed');
       const userGroup = document.getElementById('group-user');
@@ -775,9 +855,7 @@
 
   function updateSaveButtonVisibility() {
     if (page !== 'maps') return;
-
     const showEditor = !!(currentMap && !currentMap.seed);
-
     if (saveBtn) saveBtn.style.display = showEditor ? '' : 'none';
 
     const sectionsWrap = document.getElementById('mapPinSections');
@@ -786,7 +864,6 @@
     if (divider) divider.style.display = showEditor ? '' : 'none';
   }
 
-  // Wire map list clicks (delegated — list is re-rendered often)
   pinsPanel.addEventListener('click', async (e) => {
     if (page !== 'maps') return;
 
@@ -828,7 +905,6 @@
 
     const clickedId = item.dataset.mapId;
 
-    // If clicking the already-active map, deselect it
     if (currentMap && currentMap.id === clickedId) {
       currentMap = null;
       pins = [];
@@ -853,12 +929,10 @@
 
   /* ─────────────── INIT ─────────────── */
   async function boot() {
-    // Wait for auth.js to finish its initial check before deciding where to load from.
     if (window.BMX?.authReady) {
       await window.BMX.authReady;
     }
 
-    // Load maps from the right source first
     await migrateLocalMapsIfNeeded();
     await loadUserMaps();
 
@@ -880,11 +954,9 @@
   }
   boot();
 
-  // When auth changes (login/logout), reload the map list
   if (window.BMX?.auth) {
     window.BMX.auth.onChange(() => {
       migrateLocalMapsIfNeeded().then(() => loadUserMaps());
     });
   }
-
 })();
