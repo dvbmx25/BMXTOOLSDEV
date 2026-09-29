@@ -5,7 +5,6 @@
   const wrap = document.getElementById('trainingApp');
   if (!wrap) return;
 
-  // Element refs
   const authPopup     = document.getElementById('trainingAuthPopup');
   const wizard        = document.getElementById('tpWizard');
   const wizardTitle   = document.getElementById('tpWizardTitle');
@@ -54,7 +53,7 @@
   const raceResultSave  = document.getElementById('tpRaceResultSave');
   const raceResultCancel= document.getElementById('tpRaceResultCancel');
 
-  const DEFAULT_TRAINING_DAYS = [1, 3, 5];
+  const DEFAULT_TRAINING_DAYS = [0, 1, 2, 3, 4, 5, 6]; // every day
 
   const SEED_LIBRARY = {
     'Gate Work': ['Gate starts — gate form', '30ft sprints', '15-30ft uphill sprints'],
@@ -63,19 +62,14 @@
     'Custom':    []
   };
 
-  const NUMBER_PROMPT_WORKOUTS = new Set([
-    'Pump laps', 'X half laps, first half', 'X half laps, second half', 'X full laps'
-  ]);
-
   let sb = null;
   let user = null;
-  let plan = null;               // active (non-archived) plan
-  let sessions = [];             // sessions for active plan
+  let plan = null;
+  let sessions = [];
   let library = [];
-  let archivedPlans = [];        // [{ plan, sessions }]
+  let archivedPlans = [];
   let initialized = false;
 
-  // Session expansion state — expanded ones are tracked; default is collapsed
   const expandedSessions = new Set();
 
   async function boot() {
@@ -398,7 +392,7 @@
     return new Promise(resolve => {
       numberPopupResolve = resolve;
       numberPopupTitle.textContent = workoutName;
-      numberPopupSub.textContent = 'How many reps?';
+      numberPopupSub.textContent = 'How many?';
       numberInput.value = '5';
       numberPopup.style.display = 'flex';
       setTimeout(() => { numberInput.focus(); numberInput.select(); }, 30);
@@ -455,24 +449,20 @@
     if (e.target === raceResultPopup) closeRaceResultPopup(null);
   });
 
-  // Detect that the race has happened and prompt if we haven't archived yet
   function maybePromptRaceResult() {
     if (!plan || plan.archived) return;
     if (!plan.race_date) return;
     const today = new Date(); today.setHours(0,0,0,0);
     const race = new Date(plan.race_date + 'T00:00:00');
-    // Prompt starting the day AFTER the race
     if (race >= today) return;
-    // Only auto-prompt once per session, and only if we haven't already got finishes stored
     const existing = Array.isArray(plan.race_finishes) ? plan.race_finishes : [];
-    if (existing.some(f => f.result)) return; // already has finishes, don't nag
-
+    if (existing.some(f => f.result)) return;
     setTimeout(() => promptRaceResultAndArchive(), 500);
   }
 
   async function promptRaceResultAndArchive() {
     const finishes = await openRaceResultPopup();
-    if (!finishes) return; // user clicked Later
+    if (!finishes) return;
     await archivePlan(finishes);
   }
 
@@ -485,7 +475,6 @@
     }).eq('id', plan.id);
     if (error) { console.error('archive error:', error); return; }
 
-    // Reload everything: clear active plan, refresh archived, show wizard for next block
     plan = null;
     sessions = [];
     await loadArchivedPlans();
@@ -517,14 +506,15 @@
   });
 
   function renderPastPlans() {
-    if (!archivedPlans.length) {
-      pastPlansSection.style.display = 'none';
-      return;
-    }
+    // Always show the section so the user knows it's there
     pastPlansSection.style.display = '';
     pastPlansCount.textContent = archivedPlans.length;
 
     pastPlansBody.innerHTML = '';
+    if (!archivedPlans.length) {
+      pastPlansBody.innerHTML = '<p class="tp-empty">No past race plans yet. When a race date passes, you\'ll be prompted to log how it went, and it will show up here.</p>';
+      return;
+    }
     archivedPlans.forEach(entry => {
       pastPlansBody.appendChild(renderArchivedPlan(entry));
     });
@@ -539,7 +529,6 @@
     const completed = sess.filter(s => s.completed).length;
     const total = sess.length;
 
-    // Summary line from the finishes
     const finishes = Array.isArray(p.race_finishes) ? p.race_finishes : [];
     const finishSummary = finishes
       .filter(f => f.result)
@@ -690,7 +679,6 @@
     const row = document.createElement('div');
     row.className = 'tp-session-row' + (s.completed ? ' completed' : '');
     row.dataset.id = s.id;
-    // Start collapsed unless the user has explicitly expanded this session in this visit
     if (!expandedSessions.has(s.id)) row.classList.add('collapsed');
 
     const d = new Date(s.session_date + 'T00:00:00');
@@ -777,12 +765,12 @@
       let payload;
       try { payload = JSON.parse(data); } catch { return; }
 
-      let workoutText = payload.name;
-      if (NUMBER_PROMPT_WORKOUTS.has(payload.name)) {
-        const num = await openNumberPopup(payload.name);
-        if (num === null) return;
-        workoutText = payload.name.replace(/^X\s+/i, `${num} `);
-      }
+      // Prompt for the number of reps for EVERY workout drop
+      const num = await openNumberPopup(payload.name);
+      if (num === null) return;
+
+      // Compose "5 Manuals" style text
+      const workoutText = `${num} ${payload.name}`;
 
       const list = parseFocus(s.focus);
       list.push(workoutText);
