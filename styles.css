@@ -194,21 +194,19 @@ body {
   backface-visibility: hidden;
   transform: translate3d(0, 0, 0) scale(1);
 }
-
 .pin {
   position: absolute;
-  width: 28px;
-  height: 28px;
-  margin-left: -14px;
-  margin-top: -28px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  margin-top: -20px;
   pointer-events: auto;
   cursor: pointer;
-  filter: drop-shadow(0 4px 5px rgba(0,0,0,.5));
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,.5));
   z-index: 10;
   animation: pin-pop .2s cubic-bezier(.2,.9,.4,1.2);
   transition: transform .12s ease;
 }
-
 .pin:hover { transform: scale(1.15); }
 
 .pin.active.kind-race svg     { filter: drop-shadow(0 0 10px #ff3b6f) drop-shadow(0 0 6px #ffffff); }
