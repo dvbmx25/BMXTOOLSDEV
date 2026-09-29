@@ -328,10 +328,12 @@
   }
 
   /* ─────────────── POPUP ─────────────── */
+  let currentOpenPopup = null;
+
   function closePopup() {
-    if (activePopupPinId != null) {
-      const m = pinMarkers.get(activePopupPinId);
-      if (m && m.getPopup && m.isPopupOpen && m.isPopupOpen()) m.closePopup();
+    if (currentOpenPopup) {
+      try { map.closePopup(currentOpenPopup); } catch {}
+      currentOpenPopup = null;
     }
     activePopupPinId = null;
     renderPins();
@@ -340,10 +342,13 @@
 
   function openPopup(pin) {
     if (!map) return;
-    if (activePopupPinId != null) {
-      const prev = pinMarkers.get(activePopupPinId);
-      if (prev && prev.isPopupOpen && prev.isPopupOpen()) prev.closePopup();
+
+    // Close previous
+    if (currentOpenPopup) {
+      try { map.closePopup(currentOpenPopup); } catch {}
+      currentOpenPopup = null;
     }
+
     activePopupPinId = pin.id;
     renderPins();
     renderAll();
@@ -410,36 +415,51 @@
       .setContent(html)
       .openOn(map);
 
-    popup.on('add', () => {
+    currentOpenPopup = popup;
+
+    // Wire everything after the popup content is in the DOM
+    setTimeout(() => {
       const el = popup.getElement();
       if (!el) return;
 
-      el.addEventListener('click', (ev) => {
-        const closeBtn = ev.target.closest('.pin-popup-close, .pin-popup-close-2');
-        if (closeBtn) {
+      // Close button (header ×)
+      const closeBtn = el.querySelector('.pin-popup-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          map.closePopup(popup);
-          activePopupPinId = null;
-          renderPins();
-          renderAll();
-          return;
-        }
+          ev.preventDefault();
+          closePopup();
+        });
+      }
 
-        const delBtn = ev.target.closest('.pin-popup-delete');
-        if (delBtn) {
+      // Close button (read-only mode)
+      const closeBtn2 = el.querySelector('.pin-popup-close-2');
+      if (closeBtn2) {
+        closeBtn2.addEventListener('click', (ev) => {
           ev.stopPropagation();
+          ev.preventDefault();
+          closePopup();
+        });
+      }
+
+      // Delete button
+      const delBtn = el.querySelector('.pin-popup-delete');
+      if (delBtn) {
+        delBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
           pins = pins.filter(p => p.id !== pin.id);
           persist();
-          map.closePopup(popup);
-          activePopupPinId = null;
-          renderPins();
-          renderAll();
-          return;
-        }
+          closePopup();
+        });
+      }
 
-        const savePinBtn = ev.target.closest('.pin-popup-save');
-        if (savePinBtn) {
+      // Save button
+      const savePinBtn = el.querySelector('.pin-popup-save');
+      if (savePinBtn) {
+        savePinBtn.addEventListener('click', (ev) => {
           ev.stopPropagation();
+          ev.preventDefault();
           pin.title = el.querySelector('.f-title').value.trim();
           const dEl = el.querySelector('.f-desc'); if (dEl) pin.description = dEl.value.trim();
           const rEl = el.querySelector('.f-racer'); if (rEl) pin.racer = rEl.value.trim();
@@ -448,28 +468,22 @@
           const resEl = el.querySelector('.f-results'); if (resEl) pin.results = resEl.value.trim();
           const clsEl = el.querySelector('.f-class'); if (clsEl) pin.ageList = clsEl.value;
           persist();
-          map.closePopup(popup);
-          activePopupPinId = null;
-          renderPins();
-          renderAll();
-          return;
-        }
-      });
+          closePopup();
+        });
+      }
 
-      el.addEventListener('change', (ev) => {
-        const classEl = ev.target.closest('.f-class');
-        if (!classEl) return;
-        const ageEl = el.querySelector('.f-age');
-        if (!ageEl) return;
-        const list = classEl.value === 'boysCruiser' ? AGE_OPTIONS_BOYS_CRUISER
-                  : classEl.value === 'girlsCruiser' ? AGE_OPTIONS_GIRLS_CRUISER
-                  : AGE_OPTIONS_STANDARD;
-        ageEl.innerHTML = buildOptions(list, '', 'Select age…');
-      });
-
-      const latest = pinMarkers.get(pin.id);
-      if (latest) popup.setLatLng(latest.getLatLng());
-    });
+      // Class → Age cascade
+      const classEl = el.querySelector('.f-class');
+      const ageEl = el.querySelector('.f-age');
+      if (classEl && ageEl) {
+        classEl.addEventListener('change', () => {
+          const list = classEl.value === 'boysCruiser' ? AGE_OPTIONS_BOYS_CRUISER
+                    : classEl.value === 'girlsCruiser' ? AGE_OPTIONS_GIRLS_CRUISER
+                    : AGE_OPTIONS_STANDARD;
+          ageEl.innerHTML = buildOptions(list, '', 'Select age…');
+        });
+      }
+    }, 0);
   }
 
   function persist() {
