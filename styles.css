@@ -1394,38 +1394,3 @@ body {
   border: 1px dashed #12315c;
   min-height: 160px;
 }
-/* ── FORCE two-column layout: map left, pins right ── */
-.pinboard-container .board-layout {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) 340px !important;
-  gap: 24px !important;
-  align-items: start !important;
-  flex-wrap: nowrap !important;
-  justify-content: stretch !important;
-  width: 100% !important;
-}
-
-.pinboard-container .board-layout > .map-column {
-  min-width: 0 !important;
-  max-width: 100% !important;
-  width: 100% !important;
-}
-
-.pinboard-container .board-layout > .pins-panel {
-  min-width: 0 !important;
-  max-width: 100% !important;
-  width: 100% !important;
-  flex: none !important;
-}
-
-/* The hint row should be a full-width block below the grid, not floating */
-.pinboard-container > .hint {
-  flex-basis: 100%;
-  width: 100%;
-}
-
-@media (max-width: 1100px) {
-  .pinboard-container .board-layout {
-    grid-template-columns: 1fr !important;
-  }
-}
