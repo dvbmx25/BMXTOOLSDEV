@@ -173,22 +173,22 @@ body {
 }
 
 .static-image {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-width: none;
-  max-height: none;
-  object-fit: fill;
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+  object-fit: fill !important;
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
-  margin: 0;
+  margin: 0 !important;
 }
 
 .map-stage {
   position: relative;
+  display: block;
   width: 100%;
-  height: auto;
   transform-origin: 0 0;
   will-change: transform;
   backface-visibility: hidden;
