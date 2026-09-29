@@ -4119,3 +4119,19 @@ body {
 .zoom-btn:active {
   transform: scale(.95);
 }
+/* Map stage wrapper — image + pins scale together */
+.map-stage {
+  position: relative;
+  display: block;
+  width: 100%;
+  transform-origin: 0 0;
+  transition: transform 0.15s ease-out;
+}
+.map-stage .static-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.image-pin-wrapper {
+  overflow: hidden;
+}
