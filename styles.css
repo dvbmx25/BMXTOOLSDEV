@@ -3967,3 +3967,32 @@ body {
 /* Existing workout list styling already declared elsewhere — make sure archived version looks consistent */
 .tp-archived-session .tp-workout-list { gap: 4px; margin-top: 2px; }
 .tp-archived-session .tp-workout-item { padding: 5px 10px; font-size: .78rem; }
+/* ─── Pin popup — location / phone / website / contact lines ─── */
+.pin-popup-static {
+  font-size: .82rem;
+  color: #e6f0ff;
+  background: #08203f;
+  border: 1px solid #1a3f6e;
+  border-radius: 8px;
+  padding: 8px 10px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.pin-popup-link {
+  display: block;
+  font-size: .82rem;
+  color: #3DA5FF;
+  background: #08203f;
+  border: 1px solid #1a3f6e;
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-decoration: none;
+  transition: .15s;
+  word-break: break-word;
+}
+.pin-popup-link:hover {
+  background: #0e2a4f;
+  color: #7CC3FF;
+  border-color: #2c5488;
+}
