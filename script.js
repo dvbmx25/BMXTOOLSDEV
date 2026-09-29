@@ -1,10 +1,10 @@
 (function () {
   const wrapper = document.getElementById('imageWrapper');
-  const staticImage = document.getElementById('staticImage');
+  const staticImage = document.getElementById('staticImage'); // may be null — used only for legacy fallback checks
   const pinsPanel = document.getElementById('pinsPanel');
-  const stage = document.getElementById('mapStage');
+  const mapStage = document.getElementById('mapStage');
 
-  if (!wrapper || !staticImage || !pinsPanel) return;
+  if (!wrapper || !pinsPanel || !mapStage) return;
 
   const page = document.body.dataset.page || 'creator';
   const mapId = wrapper.dataset.mapId || 'default';
@@ -12,6 +12,55 @@
   const LS_DRAFT = 'bmxtools.creatorDraft';
   const LS_USER_MAPS = 'bmxtools.userMaps';
 
+  /* ─────────────── LEAFLET MAP ─────────────── */
+  const DEFAULT_CENTER = [39.5, -98.35];
+  const DEFAULT_ZOOM = 4;
+
+  let map = null;
+  let markerLayer = null;       // holds all current markers
+  const pinMarkers = new Map(); // pin.id -> L.Marker
+
+  function initMap() {
+    if (map) return;
+    map = L.map('leafletMap', {
+      center: DEFAULT_CENTER,
+      zoom: DEFAULT_ZOOM,
+      worldCopyJump: true,
+      zoomControl: true
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    markerLayer = L.layerGroup().addTo(map);
+
+    // Click on map = add new pin (respecting read-only + section visibility)
+    map.on('click', (e) => {
+      if (isReadOnly()) return;
+      if (page === 'maps' && !currentMap) return;
+      // Ignore clicks that hit a marker (Leaflet fires map click after marker click otherwise)
+      // We detect by checking if the click target is inside a marker element
+      const orig = e.originalEvent;
+      if (orig && orig.target && orig.target.closest && orig.target.closest('.leaflet-marker-icon')) return;
+
+      const newPin = {
+        id: ++nextId,
+        kind: activeSection,
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+        title: '', racer: '', date: '', age: '', description: '', results: ''
+      };
+      pins.push(newPin);
+      persist();
+      renderPins();
+      renderAll();
+      openPopup(newPin);
+    });
+  }
+
+  /* ─────────────── USER MAPS ─────────────── */
   let userMapsCache = [];
 
   function readLocalUserMaps() {
@@ -61,172 +110,6 @@
   function writeDraft(data) {
     try { localStorage.setItem(LS_DRAFT, JSON.stringify(data)); } catch {}
   }
-
-  /* ─────────────── LAT/LNG → X/Y CONVERTER ─────────────── */
-const MAP_BOUNDS = {
-  minLat: 24.5,
-  maxLat: 49.5,
-  minLng: -125,
-  maxLng: -66.5
-};
-
-  function latLngToXY(lat, lng) {
-    const nLat = Number(lat);
-    const nLng = Number(lng);
-    if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return null;
-    const x = ((nLng - MAP_BOUNDS.minLng) / (MAP_BOUNDS.maxLng - MAP_BOUNDS.minLng)) * 100;
-    const y = ((MAP_BOUNDS.maxLat - nLat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat)) * 100;
-    return { x, y };
-  }
-
-  const AK_INSET = { x: 12, y: 82 };
-  const HI_INSET = { x: 32, y: 88 };
-
-  function insetWithOffset(inset, index, total) {
-    const spread = 6;
-    if (total <= 1) return { x: inset.x, y: inset.y };
-    const angle = (index / total) * Math.PI * 2;
-    return {
-      x: inset.x + Math.cos(angle) * spread,
-      y: inset.y + Math.sin(angle) * spread
-    };
-  }
-
-  /* ─────────────── ZOOM + PAN (stage-based) ─────────────── */
-  const ZOOM_MIN = 1;
-  const ZOOM_MAX = 6;
-  const ZOOM_STEP = 1.25;
-  const WHEEL_STEP = 0.0015;
-  const zoomState = { scale: 1, tx: 0, ty: 0 };
-
-  function getStage() {
-    return document.getElementById('mapStage') || staticImage.parentElement;
-  }
-
-  /* Cached wrapper size — invalidated on resize so we don't reflow every frame. */
-  let _wrapperSize = null;
-  function getWrapperSize() {
-    if (_wrapperSize) return _wrapperSize;
-    if (!wrapper) return { w: 0, h: 0 };
-    _wrapperSize = { w: wrapper.clientWidth, h: wrapper.clientHeight };
-    return _wrapperSize;
-  }
-  window.addEventListener('resize', () => { _wrapperSize = null; });
-
-  function clampPan() {
-    const { w, h } = getWrapperSize();
-    if (!w || !h) return;
-    const scaledW = w * zoomState.scale;
-    const scaledH = h * zoomState.scale;
-    const minTx = Math.min(0, w - scaledW);
-    const minTy = Math.min(0, h - scaledH);
-    if (zoomState.tx > 0) zoomState.tx = 0;
-    if (zoomState.tx < minTx) zoomState.tx = minTx;
-    if (zoomState.ty > 0) zoomState.ty = 0;
-    if (zoomState.ty < minTy) zoomState.ty = minTy;
-  }
-
-  function applyZoom() {
-    const s = getStage();
-    if (!s) return;
-    clampPan();
-    s.style.transform = `translate3d(${zoomState.tx}px, ${zoomState.ty}px, 0) scale(${zoomState.scale})`;
-    if (wrapper) wrapper.classList.toggle('pannable', zoomState.scale > 1);
-  }
-
-  function resetZoom() {
-    zoomState.scale = 1;
-    zoomState.tx = 0;
-    zoomState.ty = 0;
-    applyZoom();
-  }
-
-  function zoomAt(clientX, clientY, factor) {
-    if (!wrapper) return;
-    const rect = wrapper.getBoundingClientRect();
-    const px = (clientX - rect.left - zoomState.tx) / zoomState.scale;
-    const py = (clientY - rect.top  - zoomState.ty) / zoomState.scale;
-
-    const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomState.scale * factor));
-    if (newScale === zoomState.scale) return;
-
-    zoomState.tx = clientX - rect.left - px * newScale;
-    zoomState.ty = clientY - rect.top  - py * newScale;
-    zoomState.scale = newScale;
-
-    if (zoomState.scale === 1) { zoomState.tx = 0; zoomState.ty = 0; }
-    applyZoom();
-  }
-
-  function zoomIn() {
-    if (!wrapper) return;
-    const rect = wrapper.getBoundingClientRect();
-    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, ZOOM_STEP);
-  }
-
-  function zoomOut() {
-    if (!wrapper) return;
-    const rect = wrapper.getBoundingClientRect();
-    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / ZOOM_STEP);
-  }
-
-  /* ─────────────── WHEEL ZOOM (rAF-throttled) ─────────────── */
-  let wheelRaf = null;
-  let pendingWheel = null;
-
-  wrapper.addEventListener('wheel', (e) => {
-    if (e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
-    e.preventDefault();
-    pendingWheel = { x: e.clientX, y: e.clientY, dy: e.deltaY };
-    if (wheelRaf) return;
-    wheelRaf = requestAnimationFrame(() => {
-      wheelRaf = null;
-      if (!pendingWheel) return;
-      const { x, y, dy } = pendingWheel;
-      pendingWheel = null;
-      const factor = Math.exp(-dy * WHEEL_STEP);
-      zoomAt(x, y, factor);
-    });
-  }, { passive: false });
-
-  /* ─────────────── DRAG-TO-PAN ─────────────── */
-  let isPanning = false;
-  let panStart = null;
-  let panMoved = false;
-
-  wrapper.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.pin') || e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
-    if (e.button !== 0) return;
-    if (zoomState.scale <= 1) return;
-
-    isPanning = true;
-    panMoved = false;
-    panStart = { x: e.clientX, y: e.clientY, tx: zoomState.tx, ty: zoomState.ty };
-    try { wrapper.setPointerCapture(e.pointerId); } catch {}
-    wrapper.style.cursor = 'grabbing';
-  });
-
-  wrapper.addEventListener('pointermove', (e) => {
-    if (!isPanning || !panStart) return;
-    const dx = e.clientX - panStart.x;
-    const dy = e.clientY - panStart.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panMoved = true;
-    zoomState.tx = panStart.tx + dx;
-    zoomState.ty = panStart.ty + dy;
-    applyZoom();
-  });
-
-  function endPan(e) {
-    if (!isPanning) return;
-    isPanning = false;
-    panStart = null;
-    wrapper.style.cursor = '';
-    try { wrapper.releasePointerCapture(e.pointerId); } catch {}
-  }
-
-  wrapper.addEventListener('pointerup', endPan);
-  wrapper.addEventListener('pointercancel', endPan);
-  wrapper.addEventListener('pointerleave', endPan);
 
   /* ─────────────── STATE ─────────────── */
   let pins = [];
@@ -335,29 +218,6 @@ const MAP_BOUNDS = {
         if (group) group.classList.toggle('open');
       });
     });
-
-    injectZoomControls();
-  }
-
-  function injectZoomControls() {
-    if (wrapper.querySelector('.zoom-controls')) return;
-    const ctrl = document.createElement('div');
-    ctrl.className = 'zoom-controls';
-    ctrl.innerHTML = `
-      <button class="zoom-btn" data-zoom="in" title="Zoom in">＋</button>
-      <button class="zoom-btn" data-zoom="out" title="Zoom out">－</button>
-      <button class="zoom-btn" data-zoom="reset" title="Reset">⟲</button>
-    `;
-    wrapper.appendChild(ctrl);
-    ctrl.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-zoom]');
-      if (!btn) return;
-      e.stopPropagation();
-      const action = btn.dataset.zoom;
-      if (action === 'in') zoomIn();
-      if (action === 'out') zoomOut();
-      if (action === 'reset') resetZoom();
-    });
   }
 
   if (page === 'maps') buildMapsSidebar();
@@ -374,23 +234,34 @@ const MAP_BOUNDS = {
   });
   const saveBtn = document.getElementById('saveMapBtn');
 
-  /* ─────────────── PIN SVG ─────────────── */
-  function pinSvg(kind) {
-    const config = {
-      race: { grad: 'pinGradientRed', stops: '<stop stop-color="#FF7B9C"/><stop offset="1" stop-color="#FF3B6F"/>' },
-      track: { grad: 'pinGradientBlue', stops: '<stop stop-color="#7CC3FF"/><stop offset="1" stop-color="#1E7BE0"/>' },
-      dirt: { grad: 'pinGradientGreen', stops: '<stop stop-color="#86EFAC"/><stop offset="1" stop-color="#22C55E"/>' },
-      pump: { grad: 'pinGradientYellow', stops: '<stop stop-color="#FDE68A"/><stop offset="1" stop-color="#EAB308"/>' },
-      bikepark: { grad: 'pinGradientWhite', stops: '<stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#C7DBFF"/>' }
-    };
-    const c = config[kind] || config.race;
-    return `
-      <svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
-        <defs><linearGradient id="${c.grad}" x1="0" y1="0" x2="0" y2="1">${c.stops}</linearGradient></defs>
-        <path d="M12 0C5.4 0 0 5.4 0 12c0 8.4 12 20 12 20s12-11.6 12-20C24 5.4 18.6 0 12 0z"
-              fill="url(#${c.grad})" stroke="#0a2547" stroke-width="1"/>
-        <circle cx="12" cy="12" r="4.5" fill="#0a2547" opacity="0.6"/>
+  /* ─────────────── PIN ICON ─────────────── */
+  const PIN_COLORS = {
+    race:     { fill: '#FF3B6F', stroke: '#0a2547' },
+    track:    { fill: '#1E7BE0', stroke: '#0a2547' },
+    dirt:     { fill: '#22C55E', stroke: '#0a2547' },
+    pump:     { fill: '#EAB308', stroke: '#0a2547' },
+    bikepark: { fill: '#FFFFFF', stroke: '#0a2547' }
+  };
+
+  function makePinIcon(kind, isActive) {
+    const c = PIN_COLORS[kind] || PIN_COLORS.race;
+    const activeRing = isActive
+      ? `<circle cx="14" cy="14" r="13" fill="none" stroke="${c.fill}" stroke-width="2.5" opacity="0.9"/>`
+      : '';
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 40" width="28" height="40">
+        ${activeRing}
+        <path d="M14 0C6.3 0 0 6.3 0 14c0 9.8 14 26 14 26s14-16.2 14-26C28 6.3 21.7 0 14 0z"
+              fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.5"/>
+        <circle cx="14" cy="14" r="5.5" fill="${c.stroke}" opacity="0.55"/>
       </svg>`;
+    return L.divIcon({
+      html: svg,
+      className: 'bmx-pin-icon',
+      iconSize: [28, 40],
+      iconAnchor: [14, 40],
+      popupAnchor: [0, -40]
+    });
   }
 
   /* ─────────────── RENDER LIST ─────────────── */
@@ -422,75 +293,66 @@ const MAP_BOUNDS = {
 
   /* ─────────────── RENDER PINS ─────────────── */
   function renderPins() {
-    const s = getStage();
-    if (!s) return;
+    if (!map || !markerLayer) return;
 
-    s.querySelectorAll('.pin').forEach(el => el.remove());
-
-    const akTotal = pins.filter(p => p.state === 'AK').length;
-    const hiTotal = pins.filter(p => p.state === 'HI').length;
-    let akSeen = 0, hiSeen = 0;
+    markerLayer.clearLayers();
+    pinMarkers.clear();
 
     pins.forEach(p => {
       if (!sectionVisibility[p.kind]) return;
+      if (!Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng))) return;
 
-      let pos;
-      if (p.state === 'AK') { pos = insetWithOffset(AK_INSET, akSeen, akTotal); akSeen++; }
-      else if (p.state === 'HI') { pos = insetWithOffset(HI_INSET, hiSeen, hiTotal); hiSeen++; }
-      else if (p.lat && p.lng) { pos = latLngToXY(p.lat, p.lng) || { x: p.x, y: p.y }; }
-      else { pos = { x: p.x, y: p.y }; }
+      const isActive = p.id === activePopupPinId;
+      const marker = L.marker([Number(p.lat), Number(p.lng)], {
+        icon: makePinIcon(p.kind, isActive),
+        draggable: !isReadOnly()
+      });
 
-      if (!pos || pos.x == null || pos.y == null) return;
+      marker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        openPopup(p);
+      });
 
-      const el = document.createElement('div');
-      el.className = `pin kind-${p.kind}${p.id === activePopupPinId ? ' active' : ''}`;
-      el.style.left = pos.x + '%';
-      el.style.top = pos.y + '%';
-      el.dataset.id = p.id;
-      el.dataset.x = pos.x;
-      el.dataset.y = pos.y;
-      el.innerHTML = pinSvg(p.kind);
-      s.appendChild(el);
+      marker.on('dragend', () => {
+        const ll = marker.getLatLng();
+        p.lat = ll.lat;
+        p.lng = ll.lng;
+        persist();
+      });
+
+      marker.addTo(markerLayer);
+      pinMarkers.set(p.id, marker);
     });
-
-    applyZoom();
   }
 
   function isReadOnly() {
     return page === 'maps' && currentMap && currentMap.seed === true;
   }
 
-  function getRenderedPosition(pin) {
-    const akTotal = pins.filter(p => p.state === 'AK').length;
-    const hiTotal = pins.filter(p => p.state === 'HI').length;
-    const akIndex = pins.filter(p => p.state === 'AK').slice(0, pins.indexOf(pin)).length;
-    const hiIndex = pins.filter(p => p.state === 'HI').slice(0, pins.indexOf(pin)).length;
-
-    if (pin.state === 'AK') return insetWithOffset(AK_INSET, akIndex, akTotal);
-    if (pin.state === 'HI') return insetWithOffset(HI_INSET, hiIndex, hiTotal);
-    if (pin.lat && pin.lng) return latLngToXY(pin.lat, pin.lng) || { x: pin.x, y: pin.y };
-    return { x: pin.x, y: pin.y };
-  }
-
   /* ─────────────── POPUP ─────────────── */
   function closePopup() {
-    const s = getStage();
-    const existing = s ? s.querySelector('.pin-popup') : null;
-    if (existing) existing.remove();
+    if (activePopupPinId != null) {
+      const m = pinMarkers.get(activePopupPinId);
+      if (m && m.getPopup && m.isPopupOpen && m.isPopupOpen()) m.closePopup();
+    }
     activePopupPinId = null;
     renderPins();
     renderAll();
   }
 
   function openPopup(pin) {
-    closePopup();
+    if (!map) return;
+    // close any previous
+    if (activePopupPinId != null) {
+      const prev = pinMarkers.get(activePopupPinId);
+      if (prev && prev.isPopupOpen && prev.isPopupOpen()) prev.closePopup();
+    }
     activePopupPinId = pin.id;
-    const pos = getRenderedPosition(pin);
+    renderPins();
+    renderAll();
 
-    const popup = document.createElement('div');
-    popup.className = 'pin-popup';
-    popup.style.left = pos.x + '%';
-    popup.style.top = pos.y + '%';
+    const marker = pinMarkers.get(pin.id);
+    if (!marker) return;
 
     const ro = isReadOnly();
     const isRace = pin.kind === 'race';
@@ -500,56 +362,86 @@ const MAP_BOUNDS = {
     const hasLocation = pin.city || pin.state || pin.address;
     const locationLine = [pin.address, pin.city, pin.state].filter(Boolean).join(', ');
 
-    popup.innerHTML = `
-      <div class="pin-popup-header">
-        <h4>${pin.kind.toUpperCase()}${ro ? ' · READ ONLY' : ''}</h4>
-        <button class="pin-popup-close" type="button">×</button>
-      </div>
-      <div><label>Title</label><input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" ${ro ? 'readonly' : ''}></div>
-      ${hasLocation ? `<div><label>Location</label><div class="pin-popup-static">${escapeHtml(locationLine)}</div></div>` : ''}
-      ${pin.phone ? `<div><label>Phone</label><a class="pin-popup-link" href="tel:${escapeHtml(pin.phone.replace(/[^\d+]/g,''))}">${escapeHtml(pin.phone)}</a></div>` : ''}
-      ${pin.website ? `<div><label>Website</label><a class="pin-popup-link" href="${escapeHtml(pin.website)}" target="_blank" rel="noopener">${escapeHtml(pin.website)}</a></div>` : ''}
-      ${pin.contact ? `<div><label>Contact</label><div class="pin-popup-static">${escapeHtml(pin.contact)}</div></div>` : ''}
-      ${isRace ? `
-      <div><label>Racer</label><input type="text" class="f-racer" value="${escapeHtml(pin.racer || '')}" ${ro ? 'readonly' : ''}></div>
-      <div class="pin-popup-row">
-        <div><label>Date</label><input type="date" class="f-date" value="${escapeHtml(pin.date || '')}" ${ro ? 'readonly' : ''}></div>
-        <div><label>Age Group</label><select class="f-age" ${ro ? 'disabled' : ''}>${buildOptions(ageList, pin.age || '', 'Select age…')}</select></div>
-      </div>
-      <div><label>Event / Notes</label><textarea class="f-desc event-field" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea></div>
-      <div><label>Results</label><textarea class="f-results results-field" ${ro ? 'readonly' : ''}>${escapeHtml(pin.results || '')}</textarea></div>
-      ` : `<div><label>Description</label><textarea class="f-desc" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea></div>`}
-      <div class="pin-popup-actions">
-        ${ro ? '<button class="pin-popup-close-2" type="button">Close</button>' : `
-          <button class="pin-popup-delete" type="button">Delete</button>
-          <button class="pin-popup-save" type="button">Save</button>`}
+    const html = `
+      <div class="pin-popup pin-popup-inline">
+        <div class="pin-popup-header">
+          <h4>${pin.kind.toUpperCase()}${ro ? ' · READ ONLY' : ''}</h4>
+          <button class="pin-popup-close" type="button">×</button>
+        </div>
+        <div><label>Title</label><input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" ${ro ? 'readonly' : ''}></div>
+        ${hasLocation ? `<div><label>Location</label><div class="pin-popup-static">${escapeHtml(locationLine)}</div></div>` : ''}
+        ${pin.phone ? `<div><label>Phone</label><a class="pin-popup-link" href="tel:${escapeHtml(String(pin.phone).replace(/[^\d+]/g,''))}">${escapeHtml(pin.phone)}</a></div>` : ''}
+        ${pin.website ? `<div><label>Website</label><a class="pin-popup-link" href="${escapeHtml(pin.website)}" target="_blank" rel="noopener">${escapeHtml(pin.website)}</a></div>` : ''}
+        ${pin.contact ? `<div><label>Contact</label><div class="pin-popup-static">${escapeHtml(pin.contact)}</div></div>` : ''}
+        ${isRace ? `
+        <div><label>Racer</label><input type="text" class="f-racer" value="${escapeHtml(pin.racer || '')}" ${ro ? 'readonly' : ''}></div>
+        <div class="pin-popup-row">
+          <div><label>Date</label><input type="date" class="f-date" value="${escapeHtml(pin.date || '')}" ${ro ? 'readonly' : ''}></div>
+          <div><label>Age Group</label><select class="f-age" ${ro ? 'disabled' : ''}>${buildOptions(ageList, pin.age || '', 'Select age…')}</select></div>
+        </div>
+        <div><label>Event / Notes</label><textarea class="f-desc event-field" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea></div>
+        <div><label>Results</label><textarea class="f-results results-field" ${ro ? 'readonly' : ''}>${escapeHtml(pin.results || '')}</textarea></div>
+        ` : `<div><label>Description</label><textarea class="f-desc" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea></div>`}
+        <div class="pin-popup-actions">
+          ${ro ? '<button class="pin-popup-close-2" type="button">Close</button>' : `
+            <button class="pin-popup-delete" type="button">Delete</button>
+            <button class="pin-popup-save" type="button">Save</button>`}
+        </div>
       </div>`;
 
-    const s = getStage();
-    if (s) s.appendChild(popup);
-    applyZoom();
+    const popup = L.popup({
+      closeButton: false,
+      autoClose: false,
+      closeOnClick: false,
+      className: 'bmx-popup-wrapper',
+      offset: [0, -36],
+      maxWidth: 380,
+      minWidth: 340
+    })
+      .setLatLng(marker.getLatLng())
+      .setContent(html)
+      .openOn(map);
 
-    popup.querySelector('.pin-popup-close').onclick = closePopup;
-    const close2 = popup.querySelector('.pin-popup-close-2');
-    if (close2) close2.onclick = closePopup;
+    // Wire buttons after Leaflet injects the HTML into the DOM
+    setTimeout(() => {
+      const el = popup.getElement();
+      if (!el) return;
 
-    const delBtn = popup.querySelector('.pin-popup-delete');
-    if (delBtn) delBtn.onclick = () => { pins = pins.filter(p => p.id !== pin.id); persist(); closePopup(); };
+      const closeBtn = el.querySelector('.pin-popup-close');
+      if (closeBtn) closeBtn.onclick = closePopup;
+      const close2 = el.querySelector('.pin-popup-close-2');
+      if (close2) close2.onclick = closePopup;
 
-    const savePinBtn = popup.querySelector('.pin-popup-save');
-    if (savePinBtn) savePinBtn.onclick = () => {
-      pin.title = popup.querySelector('.f-title').value.trim();
-      const dEl = popup.querySelector('.f-desc'); if (dEl) pin.description = dEl.value.trim();
-      const rEl = popup.querySelector('.f-racer'); if (rEl) pin.racer = rEl.value.trim();
-      const dtEl = popup.querySelector('.f-date'); if (dtEl) pin.date = dtEl.value;
-      const aEl = popup.querySelector('.f-age'); if (aEl) pin.age = aEl.value;
-      const resEl = popup.querySelector('.f-results'); if (resEl) pin.results = resEl.value.trim();
-      persist();
-      closePopup();
-    };
+      const delBtn = el.querySelector('.pin-popup-delete');
+      if (delBtn) delBtn.onclick = () => {
+        pins = pins.filter(p => p.id !== pin.id);
+        persist();
+        map.closePopup(popup);
+        activePopupPinId = null;
+        renderPins();
+        renderAll();
+      };
 
-    renderPins();
-    renderAll();
+      const savePinBtn = el.querySelector('.pin-popup-save');
+      if (savePinBtn) savePinBtn.onclick = () => {
+        pin.title = el.querySelector('.f-title').value.trim();
+        const dEl = el.querySelector('.f-desc'); if (dEl) pin.description = dEl.value.trim();
+        const rEl = el.querySelector('.f-racer'); if (rEl) pin.racer = rEl.value.trim();
+        const dtEl = el.querySelector('.f-date'); if (dtEl) pin.date = dtEl.value;
+        const aEl = el.querySelector('.f-age'); if (aEl) pin.age = aEl.value;
+        const resEl = el.querySelector('.f-results'); if (resEl) pin.results = resEl.value.trim();
+        persist();
+        map.closePopup(popup);
+        activePopupPinId = null;
+        renderPins();
+        renderAll();
+      };
+
+      // After opening, if the marker was updated by the renderPins() above,
+      // make sure the popup tracks the latest marker position
+      const latest = pinMarkers.get(pin.id);
+      if (latest) popup.setLatLng(latest.getLatLng());
+    }, 0);
   }
 
   function persist() {
@@ -573,47 +465,7 @@ const MAP_BOUNDS = {
     return el ? el.value.trim() : '';
   }
 
-  wrapper.addEventListener('click', (e) => {
-    if (panMoved) { panMoved = false; return; }
-    if (e.target.closest('.pin') || e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
-    if (isReadOnly()) return;
-    if (page === 'maps' && !currentMap) return;
-
-    const rect = wrapper.getBoundingClientRect();
-    const rawX = e.clientX - rect.left;
-    const rawY = e.clientY - rect.top;
-    const x = ((rawX - zoomState.tx) / zoomState.scale / rect.width) * 100;
-    const y = ((rawY - zoomState.ty) / zoomState.scale / rect.height) * 100;
-
-    const newPin = {
-      id: ++nextId, kind: activeSection, x, y,
-      title: '', racer: '', date: '', age: '', description: '', results: ''
-    };
-    pins.push(newPin);
-    persist();
-    renderPins();
-    renderAll();
-    const s = getStage();
-    const el = s ? s.querySelector(`.pin[data-id="${newPin.id}"]`) : null;
-    if (el) openPopup(newPin);
-  });
-
-  wrapper.addEventListener('click', (e) => {
-    const pinEl = e.target.closest('.pin');
-    if (!pinEl) return;
-    e.stopPropagation();
-    const id = Number(pinEl.dataset.id);
-    const pin = pins.find(p => p.id === id);
-    if (!pin) return;
-    if ((e.ctrlKey || e.metaKey) && !isReadOnly()) {
-      pins = pins.filter(p => p.id !== id);
-      persist();
-      closePopup();
-      return;
-    }
-    openPopup(pin);
-  });
-
+  /* ─────────────── SIDEBAR EVENTS ─────────────── */
   Object.keys(sections).forEach(kind => {
     const sec = sections[kind];
     if (!sec.el) return;
@@ -659,6 +511,7 @@ const MAP_BOUNDS = {
     sec.el.addEventListener('mousedown', () => { activeSection = kind; });
   });
 
+  /* ─────────────── SAVE BUTTON ─────────────── */
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
       if (page === 'creator') {
@@ -758,6 +611,7 @@ const MAP_BOUNDS = {
     setTimeout(() => { saveBtn.textContent = original; saveBtn.disabled = false; }, 900);
   }
 
+  /* ─────────────── MAP LIST ─────────────── */
   function renderMapLists() {
     if (page !== 'maps') return;
     const seedList = document.getElementById('seedMapList');
@@ -858,11 +712,30 @@ const MAP_BOUNDS = {
     nextId = 0;
     pins = (src.pins || []).map(p => ({ ...p, id: ++nextId }));
     closePopup();
-    resetZoom();
     renderPins();
     renderAll();
     renderMapLists();
     updateSaveButtonVisibility();
+
+    // Fit the map to the loaded pins
+    fitMapToPins();
+  }
+
+  function fitMapToPins() {
+    if (!map) return;
+    const valid = pins
+      .map(p => [Number(p.lat), Number(p.lng)])
+      .filter(([la, ln]) => Number.isFinite(la) && Number.isFinite(ln));
+    if (!valid.length) {
+      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+      return;
+    }
+    if (valid.length === 1) {
+      map.setView(valid[0], 10);
+      return;
+    }
+    const bounds = L.latLngBounds(valid);
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
   }
 
   function updateSaveButtonVisibility() {
@@ -882,9 +755,9 @@ const MAP_BOUNDS = {
     if (delBtn) {
       e.stopPropagation();
       const id = delBtn.dataset.deleteMap;
-      const map = userMapsCache.find(m => m.id === id);
-      if (!map) return;
-      if (!window.confirm(`Delete "${map.name}"?`)) return;
+      const map2 = userMapsCache.find(m => m.id === id);
+      if (!map2) return;
+      if (!window.confirm(`Delete "${map2.name}"?`)) return;
       const user = window.BMX?.auth?.getUser();
       if (user && window.BMX?.sb) {
         const result = await deleteMapFromSupabase(id);
@@ -901,6 +774,7 @@ const MAP_BOUNDS = {
         renderPins();
         renderAll();
         updateSaveButtonVisibility();
+        if (map) map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
       }
       renderMapLists();
       return;
@@ -913,28 +787,23 @@ const MAP_BOUNDS = {
       currentMap = null;
       pins = [];
       closePopup();
-      resetZoom();
       renderPins();
       renderAll();
       renderMapLists();
       updateSaveButtonVisibility();
+      if (map) map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
       return;
     }
     loadMap(clickedId);
   });
 
-  document.addEventListener('click', (e) => {
-    if (e.target.closest('.pin-popup') || e.target.closest('.pin') || e.target.closest('.pin-item')) return;
-    if (e.target.closest('#imageWrapper')) return;
-    if (e.target.closest('.map-list-item')) return;
-    if (e.target.closest('.zoom-controls')) return;
-    closePopup();
-  });
-
+  /* ─────────────── BOOT ─────────────── */
   async function boot() {
+    initMap();
     if (window.BMX?.authReady) await window.BMX.authReady;
     await migrateLocalMapsIfNeeded();
     await loadUserMaps();
+
     if (page === 'creator') {
       const draft = readDraft();
       if (draft && Array.isArray(draft.pins)) {
@@ -957,4 +826,9 @@ const MAP_BOUNDS = {
       migrateLocalMapsIfNeeded().then(() => loadUserMaps());
     });
   }
+
+  // If the container resizes, Leaflet needs a nudge to redraw
+  window.addEventListener('resize', () => {
+    if (map) setTimeout(() => map.invalidateSize(), 100);
+  });
 })();
