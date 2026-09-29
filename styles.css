@@ -4135,3 +4135,14 @@ body {
 .image-pin-wrapper {
   overflow: hidden;
 }
+.image-pin-wrapper {
+  touch-action: none; /* we handle wheel/pointer ourselves */
+}
+
+.image-pin-wrapper.pannable {
+  cursor: grab;
+}
+
+.image-pin-wrapper.pannable:active {
+  cursor: grabbing;
+}
