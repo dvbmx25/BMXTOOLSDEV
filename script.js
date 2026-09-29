@@ -47,7 +47,7 @@
         kind: activeSection,
         lat: e.latlng.lat,
         lng: e.latlng.lng,
-        title: '', racer: '', date: '', age: '', ageList: 'standard',
+        title: '', racer: '', date: '', age: '', ageList: 'novice',
         description: '', results: ''
       };
       pins.push(newPin);
@@ -152,6 +152,26 @@
   const AGE_OPTIONS_STANDARD = ['5 & Under','6','7','8','9','10','11','12','13','14','15','16','17-18','19-27','28-35','36-40','41-45','46-50','51 & Over'];
   const AGE_OPTIONS_BOYS_CRUISER = ['7 & Under','8','9','10','11','12','13','14','15','16','17-20','21-25','26-30','31-35','36-40','41-45','46-50','51-55','56-60','61 & Over'];
   const AGE_OPTIONS_GIRLS_CRUISER = ['10 & Under','11-13','14-16','17-20','21-25','26-30','31-35','36-40','41-45','46-50','51-55','56 & Over'];
+
+  // Map any class value (new or legacy) to the correct age list
+  function ageListForClass(classValue) {
+    const v = String(classValue || '').toLowerCase();
+    if (v === 'boyscruiser') return AGE_OPTIONS_BOYS_CRUISER;
+    if (v === 'girlscruiser') return AGE_OPTIONS_GIRLS_CRUISER;
+    // novice / intermediate / expert / standard (legacy) all use the standard list
+    return AGE_OPTIONS_STANDARD;
+  }
+
+  // Normalize a class value (handles legacy 'standard')
+  function normalizeClass(classValue) {
+    const v = String(classValue || '').toLowerCase();
+    if (v === 'boyscruiser') return 'boysCruiser';
+    if (v === 'girlscruiser') return 'girlsCruiser';
+    if (v === 'intermediate') return 'intermediate';
+    if (v === 'expert') return 'expert';
+    // 'novice' and legacy 'standard' both map to novice
+    return 'novice';
+  }
 
   /* ─────────────── SIDEBAR ─────────────── */
   const SECTION_KINDS = [
@@ -343,7 +363,6 @@
   function openPopup(pin) {
     if (!map) return;
 
-    // Close previous
     if (currentOpenPopup) {
       try { map.closePopup(currentOpenPopup); } catch {}
       currentOpenPopup = null;
@@ -358,9 +377,8 @@
 
     const ro = isReadOnly();
     const isRace = pin.kind === 'race';
-    const ageList = pin.ageList === 'boysCruiser' ? AGE_OPTIONS_BOYS_CRUISER
-                  : pin.ageList === 'girlsCruiser' ? AGE_OPTIONS_GIRLS_CRUISER
-                  : AGE_OPTIONS_STANDARD;
+    const pinClass = normalizeClass(pin.ageList);
+    const ageList = ageListForClass(pinClass);
     const hasLocation = pin.city || pin.state || pin.address;
     const locationLine = [pin.address, pin.city, pin.state].filter(Boolean).join(', ');
 
@@ -381,9 +399,11 @@
           <div><label>Date</label><input type="date" class="f-date" value="${escapeHtml(pin.date || '')}" ${ro ? 'readonly' : ''}></div>
           <div><label>Class</label>
             <select class="f-class" ${ro ? 'disabled' : ''}>
-              <option value="standard"${(!pin.ageList || pin.ageList === 'standard') ? ' selected' : ''}>Standard</option>
-              <option value="boysCruiser"${pin.ageList === 'boysCruiser' ? ' selected' : ''}>Boys Cruiser</option>
-              <option value="girlsCruiser"${pin.ageList === 'girlsCruiser' ? ' selected' : ''}>Girls Cruiser</option>
+              <option value="novice"${pinClass === 'novice' ? ' selected' : ''}>Novice</option>
+              <option value="intermediate"${pinClass === 'intermediate' ? ' selected' : ''}>Intermediate</option>
+              <option value="expert"${pinClass === 'expert' ? ' selected' : ''}>Expert</option>
+              <option value="boysCruiser"${pinClass === 'boysCruiser' ? ' selected' : ''}>Boys Cruiser</option>
+              <option value="girlsCruiser"${pinClass === 'girlsCruiser' ? ' selected' : ''}>Girls Cruiser</option>
             </select>
           </div>
         </div>
@@ -417,12 +437,10 @@
 
     currentOpenPopup = popup;
 
-    // Wire everything after the popup content is in the DOM
     setTimeout(() => {
       const el = popup.getElement();
       if (!el) return;
 
-      // Close button (header ×)
       const closeBtn = el.querySelector('.pin-popup-close');
       if (closeBtn) {
         closeBtn.addEventListener('click', (ev) => {
@@ -432,7 +450,6 @@
         });
       }
 
-      // Close button (read-only mode)
       const closeBtn2 = el.querySelector('.pin-popup-close-2');
       if (closeBtn2) {
         closeBtn2.addEventListener('click', (ev) => {
@@ -442,7 +459,6 @@
         });
       }
 
-      // Delete button
       const delBtn = el.querySelector('.pin-popup-delete');
       if (delBtn) {
         delBtn.addEventListener('click', (ev) => {
@@ -454,7 +470,6 @@
         });
       }
 
-      // Save button
       const savePinBtn = el.querySelector('.pin-popup-save');
       if (savePinBtn) {
         savePinBtn.addEventListener('click', (ev) => {
@@ -472,14 +487,11 @@
         });
       }
 
-      // Class → Age cascade
       const classEl = el.querySelector('.f-class');
       const ageEl = el.querySelector('.f-age');
       if (classEl && ageEl) {
         classEl.addEventListener('change', () => {
-          const list = classEl.value === 'boysCruiser' ? AGE_OPTIONS_BOYS_CRUISER
-                    : classEl.value === 'girlsCruiser' ? AGE_OPTIONS_GIRLS_CRUISER
-                    : AGE_OPTIONS_STANDARD;
+          const list = ageListForClass(classEl.value);
           ageEl.innerHTML = buildOptions(list, '', 'Select age…');
         });
       }
