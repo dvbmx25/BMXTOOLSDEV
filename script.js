@@ -180,7 +180,7 @@
     return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
   }
 
-  const AGE_OPTIONS_STANDARD = ['5 & Under','6','7','8','9','10','11','12','13','14','15','16','17-18','19-27','28-35','36-40','41-45','46 & Over'];
+  const AGE_OPTIONS_STANDARD = ['5 & Under','6','7','8','9','10','11','12','13','14','15','16','17-18','19-27','28-35','36-40','41-45','46-50','51 & Over'];
   const AGE_OPTIONS_BOYS_CRUISER = ['7 & Under','8','9','10','11','12','13','14','15','16','17-20','21-25','26-30','31-35','36-40','41-45','46-50','51-55','56-60','61 & Over'];
   const AGE_OPTIONS_GIRLS_CRUISER = ['10 & Under','11-13','14-16','17-20','21-25','26-30','31-35','36-40','41-45','46-50','51-55','56 & Over'];
 
@@ -403,7 +403,7 @@
           <label>Title</label>
           <div class="pin-title-row">
             <input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" ${ro ? 'readonly' : ''}>
-            ${showLookup ? `<button class="pin-lookup-btn" type="button" title="Look up track location">📍</button>` : ''}
+           
           </div>
           <div class="pin-lookup-status" style="display:none;"></div>
         </div>
