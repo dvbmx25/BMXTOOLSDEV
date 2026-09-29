@@ -186,10 +186,11 @@ body {
 }
 
 .map-stage {
+  position: relative;
   transform-origin: 0 0;
   will-change: transform;
   backface-visibility: hidden;
-  position: relative;
+  transform: translate3d(0, 0, 0) scale(1);
 }
 
 .pin {
