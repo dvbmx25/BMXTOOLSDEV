@@ -3,13 +3,11 @@
   const staticImage = document.getElementById('staticImage');
   const pinsPanel = document.getElementById('pinsPanel');
 
-  // If this page has no map, exit quietly
   if (!wrapper || !staticImage || !pinsPanel) return;
 
   const page = document.body.dataset.page || 'creator';
   const mapId = wrapper.dataset.mapId || 'default';
 
-  /* ─────────────── STORAGE ─────────────── */
   const LS_DRAFT = 'bmxtools.creatorDraft';
   const LS_USER_MAPS = 'bmxtools.userMaps';
 
@@ -41,10 +39,7 @@
         userMapsCache = readLocalUserMaps();
       } else {
         userMapsCache = (data || []).map(r => ({
-          id: r.id,
-          name: r.name,
-          seed: false,
-          pins: r.pins || [],
+          id: r.id, name: r.name, seed: false, pins: r.pins || [],
           createdAt: new Date(r.created_at).getTime(),
           updatedAt: new Date(r.updated_at).getTime()
         }));
@@ -66,9 +61,7 @@
     try { localStorage.setItem(LS_DRAFT, JSON.stringify(data)); } catch {}
   }
 
-  /* ─────────────── LAT/LNG → X/Y CONVERTER ───────────────
-     Approximates the US map projection for the continental US.
-     Alaska and Hawaii are handled via manual overrides further down. */
+  /* ─────────────── LAT/LNG → X/Y CONVERTER ─────────────── */
   const MAP_BOUNDS = {
     minLat: 24.5,
     maxLat: 49.5,
@@ -85,107 +78,17 @@
     return { x, y };
   }
 
-  // Alaska and Hawaii inset positions (percentages of the map image)
   const AK_INSET = { x: 12, y: 82 };
   const HI_INSET = { x: 32, y: 88 };
 
-  // Spread multiple AK or HI pins so they don't stack
   function insetWithOffset(inset, index, total) {
-    const spread = 6; // percent
+    const spread = 6;
     if (total <= 1) return { x: inset.x, y: inset.y };
     const angle = (index / total) * Math.PI * 2;
     return {
       x: inset.x + Math.cos(angle) * spread,
       y: inset.y + Math.sin(angle) * spread
     };
-  }
-
-  // Given a raw pin, compute its final x/y (either from lat/lng or from stored x/y)
-  function resolvePinPosition(pin, akIndex = 0, akTotal = 1, hiIndex = 0, hiTotal = 1) {
-    if (pin.state === 'AK') return insetWithOffset(AK_INSET, akIndex, akTotal);
-    if (pin.state === 'HI') return insetWithOffset(HI_INSET, hiIndex, hiTotal);
-    if (pin.lat && pin.lng) {
-      const pos = latLngToXY(pin.lat, pin.lng);
-      if (pos) return pos;
-    }
-    return { x: pin.x, y: pin.y };
-  }
-
-  /* ─────────────── SUPABASE WRITE HELPERS ─────────────── */
-  async function saveMapToSupabase(name, pins) {
-    const user = window.BMX?.auth?.getUser();
-    if (!user || !window.BMX?.sb) return { ok: false, reason: 'not-logged-in' };
-
-    const { error } = await window.BMX.sb
-      .from('maps')
-      .insert({ user_id: user.id, name, pins });
-
-    if (error) {
-      console.error('saveMapToSupabase:', error);
-      return { ok: false, error };
-    }
-    return { ok: true };
-  }
-
-  async function updateMapInSupabase(id, pins) {
-    const user = window.BMX?.auth?.getUser();
-    if (!user || !window.BMX?.sb) return { ok: false, reason: 'not-logged-in' };
-
-    const { error } = await window.BMX.sb
-      .from('maps')
-      .update({ pins, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('user_id', user.id);
-
-    if (error) {
-      console.error('updateMapInSupabase:', error);
-      return { ok: false, error };
-    }
-    return { ok: true };
-  }
-
-  async function deleteMapFromSupabase(id) {
-    const user = window.BMX?.auth?.getUser();
-    if (!user || !window.BMX?.sb) return { ok: false, reason: 'not-logged-in' };
-
-    const { error } = await window.BMX.sb
-      .from('maps')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
-
-    if (error) {
-      console.error('deleteMapFromSupabase:', error);
-      return { ok: false, error };
-    }
-    return { ok: true };
-  }
-
-  async function migrateLocalMapsIfNeeded() {
-    const user = window.BMX?.auth?.getUser();
-    if (!user || !window.BMX?.sb) return;
-
-    const local = readLocalUserMaps();
-    if (!local.length) return;
-
-    const { count, error } = await window.BMX.sb
-      .from('maps')
-      .select('*', { count: 'exact', head: true });
-
-    if (error || count > 0) return;
-
-    const rows = local.map(m => ({
-      user_id: user.id,
-      name: m.name || 'Untitled Map',
-      pins: m.pins || []
-    }));
-
-    const { error: insertErr } = await window.BMX.sb.from('maps').insert(rows);
-    if (insertErr) {
-      console.error('Map migration failed:', insertErr);
-      return;
-    }
-    console.log(`Migrated ${rows.length} map(s) to your account.`);
   }
 
   /* ─────────────── STATE ─────────────── */
@@ -201,22 +104,59 @@
     race: true, track: true, dirt: true, pump: true, bikepark: true
   };
 
-  /* ─────────────── DROPDOWN OPTION SETS ─────────────── */
-  const AGE_OPTIONS_STANDARD = [
-    '5 & Under', '6', '7', '8', '9', '10', '11', '12', '13',
-    '14', '15', '16', '17-18', '19-27', '28-35',
-    '36-40', '41-45', '46 & Over'
-  ];
-  const AGE_OPTIONS_BOYS_CRUISER = [
-    '7 & Under', '8', '9', '10', '11', '12', '13',
-    '14', '15', '16', '17-20', '21-25', '26-30',
-    '31-35', '36-40', '41-45', '46-50', '51-55',
-    '56-60', '61 & Over'
-  ];
-  const AGE_OPTIONS_GIRLS_CRUISER = [
-    '10 & Under', '11-13', '14-16', '17-20', '21-25', '26-30',
-    '31-35', '36-40', '41-45', '46-50', '51-55', '56 & Over'
-  ];
+  /* ─────────────── ZOOM STATE ─────────────── */
+  const zoomState = { scale: 1, translateX: 0, translateY: 0 };
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 4;
+  const ZOOM_STEP = 1.5;
+
+  function applyZoom() {
+    const img = staticImage;
+    const pinned = wrapper.querySelectorAll('.pin, .pin-popup');
+    if (img) {
+      img.style.transformOrigin = '0 0';
+      img.style.transform = `translate(${zoomState.translateX}px, ${zoomState.translateY}px) scale(${zoomState.scale})`;
+    }
+    pinned.forEach(el => {
+      el.style.transformOrigin = '0 0';
+      el.style.transform = `translate(${zoomState.translateX}px, ${zoomState.translateY}px) scale(${zoomState.scale})`;
+    });
+  }
+
+  function resetZoom() {
+    zoomState.scale = 1;
+    zoomState.translateX = 0;
+    zoomState.translateY = 0;
+    applyZoom();
+  }
+
+  function zoomIn() {
+    zoomState.scale = Math.min(zoomState.scale * ZOOM_STEP, ZOOM_MAX);
+    applyZoom();
+  }
+
+  function zoomOut() {
+    zoomState.scale = Math.max(zoomState.scale / ZOOM_STEP, ZOOM_MIN);
+    if (zoomState.scale === 1) {
+      zoomState.translateX = 0;
+      zoomState.translateY = 0;
+    }
+    applyZoom();
+  }
+
+  // Given a pin's x/y percent (0-100), zoom + center the map on it
+  function zoomToPin(pos) {
+    const rect = wrapper.getBoundingClientRect();
+    const targetScale = 3;
+    // Position of pin in wrapper pixels (unzoomed)
+    const pinPx = (pos.x / 100) * rect.width;
+    const pinPy = (pos.y / 100) * rect.height;
+    // We want the pin to appear at the center of the wrapper
+    zoomState.scale = targetScale;
+    zoomState.translateX = rect.width / 2 - pinPx * targetScale;
+    zoomState.translateY = rect.height / 2 - pinPy * targetScale;
+    applyZoom();
+  }
 
   /* ─────────────── HELPERS ─────────────── */
   function escapeHtml(str) {
@@ -227,7 +167,6 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
-
   function buildOptions(list, selected, placeholder) {
     let html = `<option value="">${placeholder || 'Select…'}</option>`;
     list.forEach(v => {
@@ -236,43 +175,39 @@
     });
     return html;
   }
-
   function formatDate(iso) {
     if (!iso) return '';
     const [y, m, d] = iso.split('-').map(Number);
     if (!y || !m || !d) return iso;
-    const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   }
-
   function uid(prefix) {
     return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
   }
 
-  /* ─────────────── SIDEBAR INJECTION ─────────────── */
+  const AGE_OPTIONS_STANDARD = ['5 & Under','6','7','8','9','10','11','12','13','14','15','16','17-18','19-27','28-35','36-40','41-45','46 & Over'];
+  const AGE_OPTIONS_BOYS_CRUISER = ['7 & Under','8','9','10','11','12','13','14','15','16','17-20','21-25','26-30','31-35','36-40','41-45','46-50','51-55','56-60','61 & Over'];
+  const AGE_OPTIONS_GIRLS_CRUISER = ['10 & Under','11-13','14-16','17-20','21-25','26-30','31-35','36-40','41-45','46-50','51-55','56 & Over'];
+
+  /* ─────────────── SIDEBAR ─────────────── */
   const SECTION_KINDS = [
-    { key: 'race',     label: 'Your Races',  dot: 'red' },
-    { key: 'track',    label: 'Tracks',      dot: 'blue' },
-    { key: 'dirt',     label: 'Dirt Jumps',  dot: 'green' },
-    { key: 'pump',     label: 'Pump Tracks', dot: 'yellow' },
-    { key: 'bikepark', label: 'Bike Parks',  dot: 'white' }
+    { key: 'race', label: 'Your Races', dot: 'red' },
+    { key: 'track', label: 'Tracks', dot: 'blue' },
+    { key: 'dirt', label: 'Dirt Jumps', dot: 'green' },
+    { key: 'pump', label: 'Pump Tracks', dot: 'yellow' },
+    { key: 'bikepark', label: 'Bike Parks', dot: 'white' }
   ];
 
   function pinSectionsHtml(collapsedDefault) {
     return SECTION_KINDS.map(k => `
       <div class="section${collapsedDefault ? '' : (k.key === 'race' ? ' open' : '')}" id="section-${k.key}">
         <div class="section-header" data-section="${k.key}">
-          <div class="section-title">
-            <span class="section-dot ${k.dot}"></span>
-            ${k.label}
-          </div>
+          <div class="section-title"><span class="section-dot ${k.dot}"></span>${k.label}</div>
           <span class="section-count" id="count-${k.key}">0</span>
-          <input type="checkbox" class="section-visibility" id="vis-${k.key}" checked title="show / hide this list on map" />
+          <input type="checkbox" class="section-visibility" id="vis-${k.key}" checked />
           <span class="section-chevron">▼</span>
         </div>
-        <div class="section-body">
-          <ul class="pins-list" id="list-${k.key}"></ul>
-        </div>
+        <div class="section-body"><ul class="pins-list" id="list-${k.key}"></ul></div>
       </div>
     `).join('');
   }
@@ -309,13 +244,37 @@
       <div class="map-pin-sections" id="mapPinSections" style="display:none;">
         ${pinSectionsHtml(true)}
       </div>
-      <button class="save-map-btn" id="saveMapBtn" style="display:none;">Save Changes</button>    `;
+      <button class="save-map-btn" id="saveMapBtn" style="display:none;">Save Changes</button>`;
 
     pinsPanel.querySelectorAll('.map-library-header').forEach(header => {
       header.addEventListener('click', () => {
         const group = header.closest('.map-library-group');
         if (group) group.classList.toggle('open');
       });
+    });
+
+    // Inject zoom controls into the image wrapper
+    injectZoomControls();
+  }
+
+  function injectZoomControls() {
+    if (wrapper.querySelector('.zoom-controls')) return;
+    const ctrl = document.createElement('div');
+    ctrl.className = 'zoom-controls';
+    ctrl.innerHTML = `
+      <button class="zoom-btn" data-zoom="in" title="Zoom in">＋</button>
+      <button class="zoom-btn" data-zoom="out" title="Zoom out">－</button>
+      <button class="zoom-btn" data-zoom="reset" title="Reset">⟲</button>
+    `;
+    wrapper.appendChild(ctrl);
+    ctrl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-zoom]');
+      if (!btn) return;
+      e.stopPropagation();
+      const action = btn.dataset.zoom;
+      if (action === 'in') zoomIn();
+      if (action === 'out') zoomOut();
+      if (action === 'reset') resetZoom();
     });
   }
 
@@ -325,56 +284,46 @@
   const sections = {};
   SECTION_KINDS.forEach(k => {
     sections[k.key] = {
-      el:    document.getElementById('section-' + k.key),
-      list:  document.getElementById('list-' + k.key),
+      el: document.getElementById('section-' + k.key),
+      list: document.getElementById('list-' + k.key),
       count: document.getElementById('count-' + k.key),
-      vis:   document.getElementById('vis-' + k.key)
+      vis: document.getElementById('vis-' + k.key)
     };
   });
-
   const saveBtn = document.getElementById('saveMapBtn');
 
   /* ─────────────── PIN SVG ─────────────── */
   function pinSvg(kind) {
     const config = {
-      race:     { grad: 'pinGradientRed',    stops: '<stop stop-color="#FF7B9C"/><stop offset="1" stop-color="#FF3B6F"/>' },
-      track:    { grad: 'pinGradientBlue',   stops: '<stop stop-color="#7CC3FF"/><stop offset="1" stop-color="#1E7BE0"/>' },
-      dirt:     { grad: 'pinGradientGreen',  stops: '<stop stop-color="#86EFAC"/><stop offset="1" stop-color="#22C55E"/>' },
-      pump:     { grad: 'pinGradientYellow', stops: '<stop stop-color="#FDE68A"/><stop offset="1" stop-color="#EAB308"/>' },
-      bikepark: { grad: 'pinGradientWhite',  stops: '<stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#C7DBFF"/>' }
+      race: { grad: 'pinGradientRed', stops: '<stop stop-color="#FF7B9C"/><stop offset="1" stop-color="#FF3B6F"/>' },
+      track: { grad: 'pinGradientBlue', stops: '<stop stop-color="#7CC3FF"/><stop offset="1" stop-color="#1E7BE0"/>' },
+      dirt: { grad: 'pinGradientGreen', stops: '<stop stop-color="#86EFAC"/><stop offset="1" stop-color="#22C55E"/>' },
+      pump: { grad: 'pinGradientYellow', stops: '<stop stop-color="#FDE68A"/><stop offset="1" stop-color="#EAB308"/>' },
+      bikepark: { grad: 'pinGradientWhite', stops: '<stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#C7DBFF"/>' }
     };
     const c = config[kind] || config.race;
     return `
       <svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="${c.grad}" x1="0" y1="0" x2="0" y2="1">
-            ${c.stops}
-          </linearGradient>
-        </defs>
+        <defs><linearGradient id="${c.grad}" x1="0" y1="0" x2="0" y2="1">${c.stops}</linearGradient></defs>
         <path d="M12 0C5.4 0 0 5.4 0 12c0 8.4 12 20 12 20s12-11.6 12-20C24 5.4 18.6 0 12 0z"
               fill="url(#${c.grad})" stroke="#0a2547" stroke-width="1"/>
         <circle cx="12" cy="12" r="4.5" fill="#0a2547" opacity="0.6"/>
-      </svg>
-    `;
+      </svg>`;
   }
 
-  /* ─────────────── RENDER: PIN LIST ─────────────── */
+  /* ─────────────── RENDER LIST ─────────────── */
   function renderAll() {
     Object.keys(sections).forEach(kind => renderSection(kind));
   }
-
   function renderSection(kind) {
     const sec = sections[kind];
     if (!sec || !sec.list) return;
-
     const list = pins.filter(p => p.kind === kind);
     if (sec.count) sec.count.textContent = list.length;
-
     if (list.length === 0) {
       sec.list.innerHTML = `<li class="pins-empty-message">No ${kind} pins yet.<br>Click the map to add one.</li>`;
       return;
     }
-
     sec.list.innerHTML = list.map(p => `
       <li class="pin-item${p.id === activePopupPinId ? ' active' : ''}" data-id="${p.id}">
         <div class="pin-item-info">
@@ -385,16 +334,14 @@
           ${p.description ? `<div class="pin-item-desc">${escapeHtml(p.description)}</div>` : ''}
           ${p.results ? `<div class="pin-item-results">${escapeHtml(p.results)}</div>` : ''}
         </div>
-        ${isReadOnly() ? '' : `<button class="pin-remove-btn" data-remove="${p.id}" title="Remove">×</button>`}
-      </li>
-    `).join('');
+        ${isReadOnly() ? '' : `<button class="pin-remove-btn" data-remove="${p.id}">×</button>`}
+      </li>`).join('');
   }
 
-  /* ─────────────── RENDER: MAP PINS ─────────────── */
+  /* ─────────────── RENDER PINS ─────────────── */
   function renderPins() {
     wrapper.querySelectorAll('.pin').forEach(el => el.remove());
 
-    // Precompute AK/HI counts for offsetting
     const akTotal = pins.filter(p => p.state === 'AK').length;
     const hiTotal = pins.filter(p => p.state === 'HI').length;
     let akSeen = 0, hiSeen = 0;
@@ -403,17 +350,10 @@
       if (!sectionVisibility[p.kind]) return;
 
       let pos;
-      if (p.state === 'AK') {
-        pos = insetWithOffset(AK_INSET, akSeen, akTotal);
-        akSeen++;
-      } else if (p.state === 'HI') {
-        pos = insetWithOffset(HI_INSET, hiSeen, hiTotal);
-        hiSeen++;
-      } else if (p.lat && p.lng) {
-        pos = latLngToXY(p.lat, p.lng) || { x: p.x, y: p.y };
-      } else {
-        pos = { x: p.x, y: p.y };
-      }
+      if (p.state === 'AK') { pos = insetWithOffset(AK_INSET, akSeen, akTotal); akSeen++; }
+      else if (p.state === 'HI') { pos = insetWithOffset(HI_INSET, hiSeen, hiTotal); hiSeen++; }
+      else if (p.lat && p.lng) { pos = latLngToXY(p.lat, p.lng) || { x: p.x, y: p.y }; }
+      else { pos = { x: p.x, y: p.y }; }
 
       if (!pos || pos.x == null || pos.y == null) return;
 
@@ -422,25 +362,19 @@
       el.style.left = pos.x + '%';
       el.style.top = pos.y + '%';
       el.dataset.id = p.id;
+      el.dataset.x = pos.x;
+      el.dataset.y = pos.y;
       el.innerHTML = pinSvg(p.kind);
       wrapper.appendChild(el);
     });
+
+    applyZoom();
   }
 
   function isReadOnly() {
     return page === 'maps' && currentMap && currentMap.seed === true;
   }
 
-  /* ─────────────── POPUP ─────────────── */
-  function closePopup() {
-    const existing = wrapper.querySelector('.pin-popup');
-    if (existing) existing.remove();
-    activePopupPinId = null;
-    renderPins();
-    renderAll();
-  }
-
-  // Find the rendered x/y for a pin so the popup can sit next to it
   function getRenderedPosition(pin) {
     const akTotal = pins.filter(p => p.state === 'AK').length;
     const hiTotal = pins.filter(p => p.state === 'HI').length;
@@ -453,10 +387,18 @@
     return { x: pin.x, y: pin.y };
   }
 
+  /* ─────────────── POPUP ─────────────── */
+  function closePopup() {
+    const existing = wrapper.querySelector('.pin-popup');
+    if (existing) existing.remove();
+    activePopupPinId = null;
+    renderPins();
+    renderAll();
+  }
+
   function openPopup(pin) {
     closePopup();
     activePopupPinId = pin.id;
-
     const pos = getRenderedPosition(pin);
 
     const popup = document.createElement('div');
@@ -469,7 +411,6 @@
     const ageList = pin.ageList === 'boysCruiser' ? AGE_OPTIONS_BOYS_CRUISER
                   : pin.ageList === 'girlsCruiser' ? AGE_OPTIONS_GIRLS_CRUISER
                   : AGE_OPTIONS_STANDARD;
-
     const hasLocation = pin.city || pin.state || pin.address;
     const locationLine = [pin.address, pin.city, pin.state].filter(Boolean).join(', ');
 
@@ -478,104 +419,44 @@
         <h4>${pin.kind.toUpperCase()}${ro ? ' · READ ONLY' : ''}</h4>
         <button class="pin-popup-close" type="button">×</button>
       </div>
-      <div>
-        <label>Title</label>
-        <input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" placeholder="Name" ${ro ? 'readonly' : ''}>
-      </div>
-
-      ${hasLocation ? `
-      <div>
-        <label>Location</label>
-        <div class="pin-popup-static">${escapeHtml(locationLine)}</div>
-      </div>
-      ` : ''}
-
-      ${pin.phone ? `
-      <div>
-        <label>Phone</label>
-        <a class="pin-popup-link" href="tel:${escapeHtml(pin.phone.replace(/[^\d+]/g, ''))}">${escapeHtml(pin.phone)}</a>
-      </div>
-      ` : ''}
-
-      ${pin.website ? `
-      <div>
-        <label>Website</label>
-        <a class="pin-popup-link" href="${escapeHtml(pin.website)}" target="_blank" rel="noopener">${escapeHtml(pin.website)}</a>
-      </div>
-      ` : ''}
-
-      ${pin.contact ? `
-      <div>
-        <label>Contact</label>
-        <div class="pin-popup-static">${escapeHtml(pin.contact)}</div>
-      </div>
-      ` : ''}
-
+      <div><label>Title</label><input type="text" class="f-title" value="${escapeHtml(pin.title || '')}" ${ro ? 'readonly' : ''}></div>
+      ${hasLocation ? `<div><label>Location</label><div class="pin-popup-static">${escapeHtml(locationLine)}</div></div>` : ''}
+      ${pin.phone ? `<div><label>Phone</label><a class="pin-popup-link" href="tel:${escapeHtml(pin.phone.replace(/[^\d+]/g,''))}">${escapeHtml(pin.phone)}</a></div>` : ''}
+      ${pin.website ? `<div><label>Website</label><a class="pin-popup-link" href="${escapeHtml(pin.website)}" target="_blank" rel="noopener">${escapeHtml(pin.website)}</a></div>` : ''}
+      ${pin.contact ? `<div><label>Contact</label><div class="pin-popup-static">${escapeHtml(pin.contact)}</div></div>` : ''}
       ${isRace ? `
-      <div>
-        <label>Racer</label>
-        <input type="text" class="f-racer" value="${escapeHtml(pin.racer || '')}" placeholder="Rider name" ${ro ? 'readonly' : ''}>
-      </div>
+      <div><label>Racer</label><input type="text" class="f-racer" value="${escapeHtml(pin.racer || '')}" ${ro ? 'readonly' : ''}></div>
       <div class="pin-popup-row">
-        <div>
-          <label>Date</label>
-          <input type="date" class="f-date" value="${escapeHtml(pin.date || '')}" ${ro ? 'readonly' : ''}>
-        </div>
-        <div>
-          <label>Age Group</label>
-          <select class="f-age" ${ro ? 'disabled' : ''}>
-            ${buildOptions(ageList, pin.age || '', 'Select age…')}
-          </select>
-        </div>
+        <div><label>Date</label><input type="date" class="f-date" value="${escapeHtml(pin.date || '')}" ${ro ? 'readonly' : ''}></div>
+        <div><label>Age Group</label><select class="f-age" ${ro ? 'disabled' : ''}>${buildOptions(ageList, pin.age || '', 'Select age…')}</select></div>
       </div>
-      <div>
-        <label>Event / Notes</label>
-        <textarea class="f-desc event-field" placeholder="Details…" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea>
-      </div>
-      <div>
-        <label>Results</label>
-        <textarea class="f-results results-field" placeholder="Placing, time…" ${ro ? 'readonly' : ''}>${escapeHtml(pin.results || '')}</textarea>
-      </div>
-      ` : `
-      <div>
-        <label>Description</label>
-        <textarea class="f-desc" placeholder="Notes…" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea>
-      </div>
-      `}
+      <div><label>Event / Notes</label><textarea class="f-desc event-field" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea></div>
+      <div><label>Results</label><textarea class="f-results results-field" ${ro ? 'readonly' : ''}>${escapeHtml(pin.results || '')}</textarea></div>
+      ` : `<div><label>Description</label><textarea class="f-desc" ${ro ? 'readonly' : ''}>${escapeHtml(pin.description || '')}</textarea></div>`}
       <div class="pin-popup-actions">
         ${ro ? '<button class="pin-popup-close-2" type="button">Close</button>' : `
           <button class="pin-popup-delete" type="button">Delete</button>
-          <button class="pin-popup-save" type="button">Save</button>
-        `}
-      </div>
-    `;
+          <button class="pin-popup-save" type="button">Save</button>`}
+      </div>`;
 
     wrapper.appendChild(popup);
+    applyZoom();
 
     popup.querySelector('.pin-popup-close').onclick = closePopup;
     const close2 = popup.querySelector('.pin-popup-close-2');
     if (close2) close2.onclick = closePopup;
 
     const delBtn = popup.querySelector('.pin-popup-delete');
-    if (delBtn) delBtn.onclick = () => {
-      pins = pins.filter(p => p.id !== pin.id);
-      persist();
-      closePopup();
-    };
+    if (delBtn) delBtn.onclick = () => { pins = pins.filter(p => p.id !== pin.id); persist(); closePopup(); };
 
     const savePinBtn = popup.querySelector('.pin-popup-save');
     if (savePinBtn) savePinBtn.onclick = () => {
       pin.title = popup.querySelector('.f-title').value.trim();
-      const dEl = popup.querySelector('.f-desc');
-      if (dEl) pin.description = dEl.value.trim();
-      const rEl = popup.querySelector('.f-racer');
-      if (rEl) pin.racer = rEl.value.trim();
-      const dtEl = popup.querySelector('.f-date');
-      if (dtEl) pin.date = dtEl.value;
-      const aEl = popup.querySelector('.f-age');
-      if (aEl) pin.age = aEl.value;
-      const resEl = popup.querySelector('.f-results');
-      if (resEl) pin.results = resEl.value.trim();
+      const dEl = popup.querySelector('.f-desc'); if (dEl) pin.description = dEl.value.trim();
+      const rEl = popup.querySelector('.f-racer'); if (rEl) pin.racer = rEl.value.trim();
+      const dtEl = popup.querySelector('.f-date'); if (dtEl) pin.date = dtEl.value;
+      const aEl = popup.querySelector('.f-age'); if (aEl) pin.age = aEl.value;
+      const resEl = popup.querySelector('.f-results'); if (resEl) pin.results = resEl.value.trim();
       persist();
       closePopup();
     };
@@ -584,7 +465,6 @@
     renderAll();
   }
 
-  /* ─────────────── PERSIST ─────────────── */
   function persist() {
     if (page === 'creator') {
       writeDraft({ pins, name: getCreatorName(), savedAt: Date.now() });
@@ -608,51 +488,46 @@
 
   /* ─────────────── MAP CLICK = ADD PIN ─────────────── */
   wrapper.addEventListener('click', (e) => {
-    if (e.target.closest('.pin') || e.target.closest('.pin-popup')) return;
+    if (e.target.closest('.pin') || e.target.closest('.pin-popup') || e.target.closest('.zoom-controls')) return;
     if (isReadOnly()) return;
     if (page === 'maps' && !currentMap) return;
 
     const rect = wrapper.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    // Account for zoom
+    const rawX = e.clientX - rect.left;
+    const rawY = e.clientY - rect.top;
+    const x = ((rawX - zoomState.translateX) / zoomState.scale / rect.width) * 100;
+    const y = ((rawY - zoomState.translateY) / zoomState.scale / rect.height) * 100;
 
     const newPin = {
-      id: ++nextId,
-      kind: activeSection,
-      x, y,
-      title: '', racer: '', date: '', age: '',
-      description: '', results: ''
+      id: ++nextId, kind: activeSection, x, y,
+      title: '', racer: '', date: '', age: '', description: '', results: ''
     };
     pins.push(newPin);
     persist();
     renderPins();
     renderAll();
-
     const el = wrapper.querySelector(`.pin[data-id="${newPin.id}"]`);
     if (el) openPopup(newPin);
   });
 
-  /* ─────────────── PIN CLICK = EDIT / CTRL+CLICK = DELETE ─────────────── */
   wrapper.addEventListener('click', (e) => {
     const pinEl = e.target.closest('.pin');
     if (!pinEl) return;
     e.stopPropagation();
-
     const id = Number(pinEl.dataset.id);
     const pin = pins.find(p => p.id === id);
     if (!pin) return;
-
     if ((e.ctrlKey || e.metaKey) && !isReadOnly()) {
       pins = pins.filter(p => p.id !== id);
       persist();
       closePopup();
       return;
     }
-
     openPopup(pin);
   });
 
-  /* ─────────────── SECTION HEADER COLLAPSE / VISIBILITY ─────────────── */
+  /* ─────────────── SECTION REFS ─────────────── */
   Object.keys(sections).forEach(kind => {
     const sec = sections[kind];
     if (!sec.el) return;
@@ -671,7 +546,6 @@
     }
   });
 
-  /* ─────────────── PIN LIST CLICK ─────────────── */
   Object.keys(sections).forEach(kind => {
     const sec = sections[kind];
     if (!sec.list) return;
@@ -693,7 +567,6 @@
     });
   });
 
-  /* ─────────────── ACTIVE SECTION ─────────────── */
   Object.keys(sections).forEach(kind => {
     const sec = sections[kind];
     if (!sec.el) return;
@@ -709,7 +582,6 @@
         if (name === null) return;
         const trimmed = name.trim() || 'Untitled Map';
         const cleanPins = pins.map(p => ({ ...p }));
-
         const user = window.BMX?.auth?.getUser();
         if (user && window.BMX?.sb) {
           const existing = userMapsCache.find(m => m.name === trimmed);
@@ -720,59 +592,38 @@
           } else {
             result = await saveMapToSupabase(trimmed, cleanPins);
           }
-
-          if (!result.ok) {
-            window.alert('Save failed. Check the console for details.');
-            return;
-          }
-
+          if (!result.ok) { window.alert('Save failed.'); return; }
           await loadUserMaps();
           const nameEl = document.getElementById('creatorMapName');
           if (nameEl) nameEl.value = trimmed;
-          window.alert(`Saved "${trimmed}" to your maps.`);
+          window.alert(`Saved "${trimmed}".`);
         } else {
           const userMaps = readLocalUserMaps();
           const existing = userMaps.find(m => m.name === trimmed);
           if (existing) {
             if (!window.confirm(`A map named "${trimmed}" already exists. Overwrite it?`)) return;
-            existing.pins = cleanPins;
-            existing.updatedAt = Date.now();
+            existing.pins = cleanPins; existing.updatedAt = Date.now();
           } else {
-            userMaps.push({
-              id: uid('map'),
-              name: trimmed,
-              seed: false,
-              pins: cleanPins,
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-            });
+            userMaps.push({ id: uid('map'), name: trimmed, seed: false, pins: cleanPins, createdAt: Date.now(), updatedAt: Date.now() });
           }
           writeUserMaps(userMaps);
           const nameEl = document.getElementById('creatorMapName');
           if (nameEl) nameEl.value = trimmed;
-          window.alert(`Saved "${trimmed}" locally. Log in to sync it to your account.`);
+          window.alert(`Saved "${trimmed}" locally.`);
         }
       } else if (page === 'maps' && currentMap && !currentMap.seed) {
         const cleanPins = pins.map(p => ({ ...p }));
         const user = window.BMX?.auth?.getUser();
-
         if (user && window.BMX?.sb) {
           const result = await updateMapInSupabase(currentMap.id, cleanPins);
-          if (!result.ok) {
-            window.alert('Save failed. Check the console for details.');
-            return;
-          }
+          if (!result.ok) { window.alert('Save failed.'); return; }
           await loadUserMaps();
           currentMap.pins = cleanPins;
           flashSaveButton('Saved!');
         } else {
           const list = readLocalUserMaps();
           const idx = list.findIndex(m => m.id === currentMap.id);
-          if (idx >= 0) {
-            list[idx].pins = cleanPins;
-            list[idx].updatedAt = Date.now();
-            writeUserMaps(list);
-          }
+          if (idx >= 0) { list[idx].pins = cleanPins; list[idx].updatedAt = Date.now(); writeUserMaps(list); }
           currentMap.pins = cleanPins;
           renderMapLists();
           flashSaveButton('Saved!');
@@ -781,28 +632,104 @@
     });
   }
 
+  async function saveMapToSupabase(name, pins) {
+    const user = window.BMX?.auth?.getUser();
+    if (!user || !window.BMX?.sb) return { ok: false };
+    const { error } = await window.BMX.sb.from('maps').insert({ user_id: user.id, name, pins });
+    if (error) { console.error(error); return { ok: false }; }
+    return { ok: true };
+  }
+  async function updateMapInSupabase(id, pins) {
+    const user = window.BMX?.auth?.getUser();
+    if (!user || !window.BMX?.sb) return { ok: false };
+    const { error } = await window.BMX.sb.from('maps').update({ pins, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', user.id);
+    if (error) { console.error(error); return { ok: false }; }
+    return { ok: true };
+  }
+  async function deleteMapFromSupabase(id) {
+    const user = window.BMX?.auth?.getUser();
+    if (!user || !window.BMX?.sb) return { ok: false };
+    const { error } = await window.BMX.sb.from('maps').delete().eq('id', id).eq('user_id', user.id);
+    if (error) { console.error(error); return { ok: false }; }
+    return { ok: true };
+  }
+  async function migrateLocalMapsIfNeeded() {
+    const user = window.BMX?.auth?.getUser();
+    if (!user || !window.BMX?.sb) return;
+    const local = readLocalUserMaps();
+    if (!local.length) return;
+    const { count, error } = await window.BMX.sb.from('maps').select('*', { count: 'exact', head: true });
+    if (error || count > 0) return;
+    const rows = local.map(m => ({ user_id: user.id, name: m.name || 'Untitled Map', pins: m.pins || [] }));
+    const { error: insertErr } = await window.BMX.sb.from('maps').insert(rows);
+    if (insertErr) console.error(insertErr);
+  }
+
   function flashSaveButton(text) {
     if (!saveBtn) return;
     const original = saveBtn.textContent;
     saveBtn.textContent = text;
     saveBtn.disabled = true;
-    setTimeout(() => {
-      saveBtn.textContent = original;
-      saveBtn.disabled = false;
-    }, 900);
+    setTimeout(() => { saveBtn.textContent = original; saveBtn.disabled = false; }, 900);
   }
 
-  /* ─────────────── MAPS PAGE: MAP LIST ─────────────── */
+  /* ─────────────── MAP LIST RENDERING (grouped) ─────────────── */
   function renderMapLists() {
     if (page !== 'maps') return;
-
     const seedList = document.getElementById('seedMapList');
     const userList = document.getElementById('userMapList');
     if (!seedList || !userList) return;
 
-    seedList.innerHTML = seedMaps.length
-      ? seedMaps.map(m => mapListItemHtml(m, true)).join('')
-      : `<li class="map-list-empty">No curated maps yet.</li>`;
+    // Group seed maps by `group`
+    const grouped = { usabmx: [] };
+    const ungrouped = [];
+    seedMaps.forEach(m => {
+      if (m.group) {
+        if (!grouped[m.group]) grouped[m.group] = [];
+        grouped[m.group].push(m);
+      } else {
+        ungrouped.push(m);
+      }
+    });
+
+    // Sort state maps alphabetically
+    if (grouped.usabmx) {
+      grouped.usabmx.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    let html = '';
+
+    if (grouped.usabmx && grouped.usabmx.length) {
+      html += `
+        <li class="map-list-group">
+          <div class="map-list-group-header" data-group="usabmx">
+            <span class="map-list-group-chevron">▶</span>
+            <span class="map-list-group-name">USA BMX Tracks</span>
+            <span class="map-list-group-count">${grouped.usabmx.length}</span>
+          </div>
+          <ul class="map-list map-list-sub" data-subgroup="usabmx" style="display:none;">
+            ${grouped.usabmx.map(m => mapListItemHtml(m, true)).join('')}
+          </ul>
+        </li>`;
+    }
+
+    if (ungrouped.length) {
+      html += ungrouped.map(m => mapListItemHtml(m, true)).join('');
+    }
+
+    seedList.innerHTML = html || `<li class="map-list-empty">No curated maps yet.</li>`;
+
+    // Wire sub-group toggle
+    seedList.querySelectorAll('.map-list-group-header').forEach(h => {
+      h.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const list = h.parentElement.querySelector('.map-list-sub');
+        if (!list) return;
+        const open = list.style.display !== 'none';
+        list.style.display = open ? 'none' : '';
+        h.querySelector('.map-list-group-chevron').textContent = open ? '▶' : '▼';
+      });
+    });
 
     const userMaps = readUserMaps();
     userList.innerHTML = userMaps.length
@@ -816,6 +743,13 @@
       const inUser = userMaps.some(m => m.id === currentMap.id);
       if (inSeed && seedGroup) seedGroup.classList.add('open');
       if (inUser && userGroup) userGroup.classList.add('open');
+      // Open USA BMX group if active map is in it
+      if (inSeed) {
+        const grp = seedList.querySelector('.map-list-sub[data-subgroup="usabmx"]');
+        const hdr = seedList.querySelector('.map-list-group-header[data-group="usabmx"]');
+        if (grp) grp.style.display = '';
+        if (hdr) hdr.querySelector('.map-list-group-chevron').textContent = '▼';
+      }
     }
   }
 
@@ -831,9 +765,8 @@
           </div>
           <div class="map-list-item-meta">${pinCount} pin${pinCount === 1 ? '' : 's'}</div>
         </div>
-        ${isSeed ? '' : `<button class="map-list-delete" data-delete-map="${m.id}" title="Delete map">×</button>`}
-      </li>
-    `;
+        ${isSeed ? '' : `<button class="map-list-delete" data-delete-map="${m.id}">×</button>`}
+      </li>`;
   }
 
   function loadMap(mapIdToLoad) {
@@ -841,23 +774,40 @@
     const user = readUserMaps().find(m => m.id === mapIdToLoad);
     const src = seed || user;
     if (!src) return;
-
     currentMap = { id: src.id, name: src.name, seed: !!seed, pins: [] };
-
     nextId = 0;
     pins = (src.pins || []).map(p => ({ ...p, id: ++nextId }));
     closePopup();
+    resetZoom();
     renderPins();
     renderAll();
     renderMapLists();
     updateSaveButtonVisibility();
+
+    // Auto-zoom to fit the state if the map is a single-state USA BMX map
+    if (src.group === 'usabmx' && pins.length) {
+      setTimeout(() => {
+        // Average pin positions (ignore AK/HI inset ones)
+        const normal = pins.filter(p => p.state !== 'AK' && p.state !== 'HI');
+        if (normal.length) {
+          let cx = 0, cy = 0, count = 0;
+          normal.forEach(p => {
+            const pos = p.lat && p.lng ? latLngToXY(p.lat, p.lng) : null;
+            if (pos) { cx += pos.x; cy += pos.y; count++; }
+          });
+          if (count) {
+            cx /= count; cy /= count;
+            zoomToPin({ x: cx, y: cy });
+          }
+        }
+      }, 100);
+    }
   }
 
   function updateSaveButtonVisibility() {
     if (page !== 'maps') return;
     const showEditor = !!(currentMap && !currentMap.seed);
     if (saveBtn) saveBtn.style.display = showEditor ? '' : 'none';
-
     const sectionsWrap = document.getElementById('mapPinSections');
     const divider = document.getElementById('mapSectionsDivider');
     if (sectionsWrap) sectionsWrap.style.display = showEditor ? '' : 'none';
@@ -873,21 +823,16 @@
       const id = delBtn.dataset.deleteMap;
       const map = userMapsCache.find(m => m.id === id);
       if (!map) return;
-      if (!window.confirm(`Delete "${map.name}"? This can't be undone.`)) return;
-
+      if (!window.confirm(`Delete "${map.name}"?`)) return;
       const user = window.BMX?.auth?.getUser();
       if (user && window.BMX?.sb) {
         const result = await deleteMapFromSupabase(id);
-        if (!result.ok) {
-          window.alert('Delete failed. Check the console for details.');
-          return;
-        }
+        if (!result.ok) { window.alert('Delete failed.'); return; }
         await loadUserMaps();
       } else {
         const list = readLocalUserMaps().filter(m => m.id !== id);
         writeUserMaps(list);
       }
-
       if (currentMap && currentMap.id === id) {
         currentMap = null;
         pins = [];
@@ -902,40 +847,33 @@
 
     const item = e.target.closest('.map-list-item');
     if (!item) return;
-
     const clickedId = item.dataset.mapId;
-
     if (currentMap && currentMap.id === clickedId) {
       currentMap = null;
       pins = [];
       closePopup();
+      resetZoom();
       renderPins();
       renderAll();
       renderMapLists();
       updateSaveButtonVisibility();
       return;
     }
-
     loadMap(clickedId);
   });
 
-  /* ─────────────── OUTSIDE CLICK CLOSES POPUP ─────────────── */
   document.addEventListener('click', (e) => {
     if (e.target.closest('.pin-popup') || e.target.closest('.pin') || e.target.closest('.pin-item')) return;
     if (e.target.closest('#imageWrapper')) return;
     if (e.target.closest('.map-list-item')) return;
+    if (e.target.closest('.zoom-controls')) return;
     closePopup();
   });
 
-  /* ─────────────── INIT ─────────────── */
   async function boot() {
-    if (window.BMX?.authReady) {
-      await window.BMX.authReady;
-    }
-
+    if (window.BMX?.authReady) await window.BMX.authReady;
     await migrateLocalMapsIfNeeded();
     await loadUserMaps();
-
     if (page === 'creator') {
       const draft = readDraft();
       if (draft && Array.isArray(draft.pins)) {
@@ -948,7 +886,6 @@
       renderMapLists();
       updateSaveButtonVisibility();
     }
-
     renderPins();
     renderAll();
   }
